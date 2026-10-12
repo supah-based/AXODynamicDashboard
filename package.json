@@ -16,7 +16,8 @@
     "test:holders": "node work/test-holder-auth.mjs && node work/test-holder-voice.mjs && node work/test-tier-plans.mjs && node work/test-reward-education.mjs && node work/test-voice-isolation.mjs",
     "test:paper": "node work/test-paper.mjs && node work/test-paper-browser.mjs",
     "test:watch-overview": "node work/test-watch-overview.mjs",
-    "test:dislike": "node work/test-dislike.mjs"
+    "test:dislike": "node work/test-dislike.mjs",
+    "test:admin": "node work/test-admin.mjs && node work/test-admin-browser.mjs && node work/test-voice-whale.mjs && node work/test-voice-isolation.mjs"
   },
   "dependencies": {
     "@metamask/connect-solana": "^2.1.1",
@@ -26,6 +27,7 @@
     "ethers": "6.17.0",
     "playwright": "1.62.1",
     "sax": "1.6.1",
-    "siwe": "3.0.0"
+    "siwe": "3.0.0",
+    "viem": "2.57.4"
   }
 }

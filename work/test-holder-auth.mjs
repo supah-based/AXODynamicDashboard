@@ -47,6 +47,9 @@ try{
  amounts.set(wallet.address.toLowerCase(),2500000n*10n**18n);clock+=61000;
  assert.equal((await call('/api/research-card',{cookie:restarted.cookie,body:{}})).status,200);
  let status=await call('/api/auth/status',{cookie:restarted.cookie});assert.equal(status.data.tier.id,'enhanced');assert.equal(status.data.remaining.aiRequests,39);
+ amounts.set(wallet.address.toLowerCase(),10000000n*10n**18n);clock+=61000;
+ status=await call('/api/auth/status',{cookie:restarted.cookie});assert.equal(status.data.tier.id,'whale');assert.equal(status.data.remaining.voiceSeconds,null,'Verified Whale voice is unlimited');
+ assert.equal((await call('/api/ai/voice',{cookie:restarted.cookie,body:{}})).data.voiceSeconds,null);
  for(const kind of ['stale','chain','token']){bad=kind;clock+=61000;assert.equal((await call('/api/ai/ask',{cookie:restarted.cookie,body:{}})).status,503);}bad=null;
  amounts.set(wallet.address.toLowerCase(),1000000n*10n**18n-1n);clock+=61000;
  assert.equal((await call('/api/ai/ask',{cookie:restarted.cookie,body:{}})).data.code,'axo_holding_required');

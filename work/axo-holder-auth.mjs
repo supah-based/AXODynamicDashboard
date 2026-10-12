@@ -83,7 +83,7 @@ export function createHolderAuth({readHoldings, now = Date.now, usagePath = null
     await load(); let a;
     try {a = await access(req);} catch(e) {if (e.status === 401) return {authenticated:false, tier:ACCESS_TIERS[0], limits:HOLDER_LIMITS.public, features:{ask:false,voice:false,customCards:false,projectMonitoring:false}, reason:e.code}; throw e;}
     const used = usage(a.s.address);
-    return {authenticated:true, wallet:a.s.address, expiresAt:a.s.expiresAt, tier:a.b.tier, balance:a.b.amount, checkedAt:a.b.checkedAt, block:a.b.block, limits:a.limits, remaining:{aiRequests:Math.max(0,a.limits.aiRequests-used.aiRequests),voiceSeconds:Math.max(0,a.limits.voiceSeconds-used.voiceSeconds)}, resetAt:Date.parse(day()+'T00:00:00Z')+86400000, features:{ask:a.b.tier.id!=='public',voice:a.b.tier.id!=='public',customCards:a.limits.customCards,projectMonitoring:a.limits.projectMonitoring}};
+    return {authenticated:true, wallet:a.s.address, expiresAt:a.s.expiresAt, tier:a.b.tier, balance:a.b.amount, checkedAt:a.b.checkedAt, block:a.b.block, limits:a.limits, remaining:{aiRequests:Math.max(0,a.limits.aiRequests-used.aiRequests),voiceSeconds:a.limits.voiceSeconds===null?null:Math.max(0,a.limits.voiceSeconds-used.voiceSeconds)}, resetAt:Date.parse(day()+'T00:00:00Z')+86400000, features:{ask:a.b.tier.id!=='public',voice:a.b.tier.id!=='public',customCards:a.limits.customCards,projectMonitoring:a.limits.projectMonitoring}};
   }
   async function handle(req, res, url) {
     if (!['/api/auth/challenge','/api/auth/verify','/api/auth/logout','/api/auth/status'].includes(url.pathname)) return false;
@@ -117,11 +117,11 @@ export function createHolderAuth({readHoldings, now = Date.now, usagePath = null
     try {
       if (!isAxoOrigin(req) || req.headers['x-axo-request']!=='1') throw fail('auth_origin','Use the Axo dashboard to request this feature.');
       const a=await access(req,feature); await load(); const used=usage(a.s.address);
-      const voiceSeconds=feature==='voice'?Math.min(300,a.limits.voiceSeconds-used.voiceSeconds):0;
+      const voiceSeconds=feature==='voice'?(a.limits.voiceSeconds===null?null:Math.min(300,a.limits.voiceSeconds-used.voiceSeconds)):0;
       const aiRequests=['/api/ai/ask','/api/ai/intent','/api/research-card','/api/social'].includes(url.pathname)?1:0;
-      if (feature==='voice' && voiceSeconds<=0 || aiRequests && used.aiRequests>=a.limits.aiRequests) throw fail('tier_daily_limit','Your tier’s daily allowance is used. Check My Utility for the reset time.',429);
-      used.aiRequests+=aiRequests;used.voiceSeconds+=voiceSeconds;await save();
-      let refundable=voiceSeconds;
+      if (feature==='voice' && voiceSeconds!==null && voiceSeconds<=0 || aiRequests && used.aiRequests>=a.limits.aiRequests) throw fail('tier_daily_limit','Your tier’s daily allowance is used. Check My Utility for the reset time.',429);
+      used.aiRequests+=aiRequests;used.voiceSeconds+=voiceSeconds||0;await save();
+      let refundable=voiceSeconds||0;
       const refund=async seconds=>{const amount=Math.min(refundable,Math.max(0,Math.floor(seconds)));refundable-=amount;used.voiceSeconds=Math.max(0,used.voiceSeconds-amount);await save();};
       req.axoHolder={...a,voiceSeconds,check:()=>access({headers:{cookie:cookieName+'='+a.s.id}},'voice'),refund};
       // AI attempts remain metered even if planning/validation fails; a rejected plan can consume compute.

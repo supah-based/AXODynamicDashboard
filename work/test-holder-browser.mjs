@@ -45,13 +45,25 @@ try{
  decline=false;await p.evaluate(()=>axoHolderSignIn());assert.equal(await p.evaluate(()=>axoHolderAccess.tier.id),'enhanced');assert.equal(await p.evaluate(()=>axoHolderRequire('customCards')),true);
  // Dynamic rewards preserve exact amounts and distinguish selection, allocation and payment.
  await p.evaluate(async()=>{close();axoEducationShown?.node.remove();axoEducationShown=null;localStorage.removeItem(educationKey);axoStream={type:'home'};const board=$('board');board.replaceChildren();for(let i=0;i<9;i++){const node=document.createElement('article');node.className='card';node.textContent='Data card '+i;board.append(node);}await axoMaybeEducation();});
- await p.waitForSelector('.axo-education');assert.equal(await p.locator('.axo-education').count(),1);assert.equal(await p.locator('#board>.card').nth(8).getAttribute('data-card'),'axo-education');
+ await p.waitForSelector('.axo-education');assert.equal(await p.locator('.axo-education').count(),1);assert.equal(await p.locator('#board>.card').nth(3).getAttribute('data-card'),'axo-education');assert.equal(await p.locator('.axo-education').getAttribute('data-size'),'wide');
  await p.evaluate(async()=>{axoEducationShown.type=2;axoEducationShown.node.querySelector('.edu-content').innerHTML=await axoEducationMarkup(2);layout();});
  let text=await p.locator('.axo-education').innerText();assert.match(text,/SELECTED/);assert.match(text,/DISTRIBUTED/);assert.match(text,/12\.345678901234567891/);assert.match(text,/Confirmed holder payments\s+Unverified/);assert.match(text,/Holder reward share of trade · buy\s+3%/);
  rewardAmount='99.123456789012345678';await p.evaluate(()=>axoRefreshRewardEducation());assert.match(await p.locator('.axo-education').innerText(),/99\.123456789012345678/);
- for(const width of [1440,390,320]){await p.setViewportSize({width,height:1100});await p.evaluate(()=>layout());await p.waitForTimeout(100);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Education overflow '+width);}
- await p.screenshot({path:'outputs/axo-rewards-education-mobile.png'});await p.locator('.edu-dismiss').click();await p.evaluate(()=>axoMaybeEducation());assert.equal(await p.locator('.axo-education').count(),0);
+ for(const width of [1440,390,320]){await p.setViewportSize({width,height:1100});await p.evaluate(()=>layout());await p.waitForTimeout(100);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Education overflow '+width);if(width===1440)assert.ok(await p.locator('.axo-education').evaluate(e=>e.classList.contains('wide-card')),'Education uses two masonry columns on desktop');}
+ await p.locator('.axo-education').screenshot({path:'outputs/axo-rewards-education-mobile.png'});await p.locator('.edu-dismiss').click();await p.evaluate(()=>axoMaybeEducation());assert.equal(await p.locator('.axo-education').count(),0);
  const stored=await p.evaluate(()=>JSON.stringify({...localStorage}));assert.ok(!stored.includes('axo-holder-session'));assert.ok(!stored.includes('Sign in to Axo'));
- await p.reload();await p.waitForFunction(()=>typeof axoHolderPanel==='function');await p.evaluate(()=>axoMaybeEducation());assert.equal(await p.locator('.axo-education').count(),0,'Dismissed education does not return on reload within 24 hours');
+ await p.reload();await p.waitForFunction(()=>typeof axoHolderPanel==='function');await p.evaluate(()=>axoMaybeEducation());assert.equal(await p.locator('.axo-education').count(),0,'Dismissed education does not return on reload within 15 minutes');
+ // Advance only the education clock, without waiting or expiring wallet sessions.
+ await p.evaluate(()=>{window.educationOriginalNow=Date.now;window.educationClockOffset=14*60000;Date.now=()=>educationOriginalNow()+educationClockOffset;});
+ await p.evaluate(()=>axoMaybeEducation());assert.equal(await p.locator('.axo-education').count(),0,'The cooldown still applies at 14 minutes');
+ await p.evaluate(async()=>{educationClockOffset=15*60000+1000;await axoMaybeEducation();});await p.waitForSelector('.axo-education');
+ assert.equal(await p.locator('.axo-education').count(),1,'One card returns after the 15-minute cooldown');
+ const shown=await p.evaluate(()=>axoEducationShown.shownAt);
+ await p.evaluate(async()=>{educationClockOffset+=15*60000+1000;await axoMaybeEducation();});
+ assert.equal(await p.locator('.axo-education').count(),1,'Scheduled updates replace the card rather than stacking it');assert.ok(await p.evaluate(()=>axoEducationShown.shownAt)>shown);
+ await p.evaluate(()=>{axoStream={type:'chain',chain:'base'};$('board').replaceChildren();for(let i=0;i<4;i++){const card=document.createElement('article');card.className='card';$('board').append(card);}});await p.waitForSelector('.axo-education');
+ assert.equal(await p.evaluate(()=>axoEducationShown.shownAt),await p.evaluate(()=>Number(localStorage.getItem(educationKey))),'Switching streams preserves the same cooldown');
+ await p.evaluate(async()=>{axoStream={type:'project'};$('board').replaceChildren();educationClockOffset+=15*60000+1000;await axoMaybeEducation();});assert.equal(await p.locator('.axo-education').count(),0,'Education does not displace the project-page anchor');
+ await p.evaluate(()=>{Date.now=educationOriginalNow;});
  assert.deepEqual(errors,[]);console.log('PASS: public browsing, no automatic signatures, authenticated SIWE browser flow, microphone and Ask gates, decline/account change, higher-tier access, daily counters, sparse dynamic rewards, exact amounts, both themes and mobile widths.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}

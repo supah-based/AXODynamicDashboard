@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import {Readable} from 'node:stream';
+import {mkdtemp,readFile,stat,readdir,rm} from 'node:fs/promises';
+import os from 'node:os';import path from 'node:path';
+import {privateKeyToAccount} from 'viem/accounts';
+import {createAdmin,validateSettings} from './axo-admin.mjs';
+import {createAiApi} from './axo-ai-api.mjs';
+import {createRadioStation} from './axo-radio-api.mjs';
+const dir=await mkdtemp(path.join(os.tmpdir(),'axo-admin-test-'));
+const account=privateKeyToAccount('0x'+'01'.repeat(32));
+const wrong=privateKeyToAccount('0x'+'ab'.repeat(32));
+let clock=Date.now(),valid=true,calls=0,cookie='',csrf='';
+const admin=createAdmin({directory:dir,adminWallet:account.address,publicOrigin:'https://streams.axo.vision',now:()=>clock,verifyKey:async()=>{calls++;return valid}});
+async function request(route,body,options={}){const req=Readable.from(body===undefined?[]:[JSON.stringify(body)]);req.method=options.method|| (body===undefined?'GET':'POST');req.headers={host:'127.0.0.1:43187',origin:options.origin??'https://streams.axo.vision','sec-fetch-site':'same-origin',cookie:options.cookie??cookie,'x-axo-request':options.requestHeader??'1','x-axo-csrf':options.csrf??csrf,'content-type':'application/json'};let status,headers,response;const res={writeHead:(s,h)=>{status=s;headers=h},end:s=>{response=JSON.parse(s)}};await admin.handle(req,res,new URL('http://localhost/api/admin/'+route));if(headers?.['set-cookie']&&options.acceptCookie!==false)cookie=headers['set-cookie'].split(';')[0];return {status,headers,response}}
+try{
+ assert.equal((await request('status',{})).status,401);
+ assert.equal((await request('challenge',{wallet:wrong.address})).status,403);
+ assert.equal((await request('challenge',{wallet:account.address},{origin:'https://evil.example'})).status,403);
+ let c=(await request('challenge',{wallet:account.address})).response;assert.match(c.message,/Purpose: authenticate/);assert.match(c.message,/no transaction authority/);
+ let bad=await wrong.signMessage({message:c.message});assert.equal((await request('verify',{wallet:account.address,nonce:c.nonce,signature:bad})).status,403);
+ let good=await account.signMessage({message:c.message});assert.equal((await request('verify',{wallet:account.address,nonce:c.nonce,signature:good})).status,403);
+ c=(await request('challenge',{wallet:account.address})).response;good=await account.signMessage({message:c.message});clock+=180001;assert.equal((await request('verify',{wallet:account.address,nonce:c.nonce,signature:good})).status,403);
+ c=(await request('challenge',{wallet:account.address})).response;good=await account.signMessage({message:c.message});let r=await request('verify',{wallet:account.address,nonce:c.nonce,signature:good});assert.equal(r.status,200);csrf=r.response.csrf;assert.match(r.headers['set-cookie'],/HttpOnly; SameSite=Strict/);assert.match(r.headers['set-cookie'],/; Secure/);
+ assert.equal((await request('verify',{wallet:account.address,nonce:c.nonce,signature:good})).status,403);
+ assert.equal((await request('status',{}, {csrf:'wrong'})).status,403);
+ assert.equal((await request('status',{}, {origin:'https://evil.example'})).status,403);
+ assert.equal((await request('status',{}, {requestHeader:'0'})).status,403);
+ const settings={voiceEnabled:true,standardVoiceSessionSeconds:90,standardDailyStarts:4,radioEnabled:false};
+ assert.throws(()=>validateSettings({...settings,arbitrary:'x'}));assert.throws(()=>validateSettings({...settings,standardDailyStarts:0}));
+ assert.equal((await request('settings',{...settings,arbitrary:'x'})).status,400);
+ assert.equal((await request('settings',settings)).status,200);
+ assert.deepEqual(admin.settings(),settings);const radio=createRadioStation({getState:()=>({feeds:{}}),apiKey:()=>admin.effectiveKey(),getAdminSettings:()=>admin.settings(),autoStart:false});assert.equal(radio.status().access,'disabled');radio.stop();if(process.platform!=='win32')assert.equal((await stat(admin.paths.settingsFile)).mode&0o777,0o600);
+ assert.equal((await request('voice-key',{key:'invalid'})).status,400);
+ const first='sk-'+ 'a'.repeat(32),second='sk-'+ 'b'.repeat(32);
+ const voice=createAiApi({now:()=>clock,apiKey:()=>admin.effectiveKey(),getAdminSettings:()=>admin.settings(),localProvider:null,fetchImpl:async(_url,opts)=>{assert.equal(opts.headers.Authorization,'Bearer '+first);return {ok:true,status:201,json:async()=>({session:{id:'one'},transport:{type:'webrtc',sdp:'answer'}})}}});
+ assert.equal((await voice.status()).liveConfigured,Boolean(process.env.OPENAI_API_KEY?.trim()));
+ r=await request('voice-key',{key:first});assert.equal(r.status,200);assert.equal(r.response.voiceKey.verified,true);assert.ok(!JSON.stringify(r).includes(first));assert.equal(admin.effectiveKey(),first);if(process.platform!=='win32')assert.equal((await stat(admin.paths.secretFile)).mode&0o777,0o600);
+ valid=false;r=await request('voice-key',{key:second});assert.equal(r.status,422);assert.equal(admin.effectiveKey(),first);assert.ok(!JSON.stringify(r).includes(second));
+ assert.equal(calls,2);assert.deepEqual((await readdir(dir)).sort(),['admin-settings.json','admin-voice-key']);
+ assert.equal((await voice.status()).liveConfigured,true);let live=await voice.startVoice('v=0\r\n');assert.equal(live.expiresAt>clock,true);assert.equal((await voice.status()).maxVoiceSeconds,90);
+ await request('settings',{...settings,voiceEnabled:false});await assert.rejects(()=>voice.startVoice('v=0\r\n'),/disabled/);
+ await request('voice-key/remove',{});assert.equal(admin.voiceKey(),null);const fallback=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='sk-'+'c'.repeat(32);assert.equal(admin.effectiveKey(),process.env.OPENAI_API_KEY);if(fallback===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=fallback;assert.equal((await request('status',{})).response.voiceKey.managed,false);
+ clock+=30*60000+1;assert.equal((await request('status',{})).status,401);
+ console.log('PASS admin wrong-wallet, signature replay, challenge/session expiry, origin/CSRF, redaction, key verification rollback, atomic mode 0600, runtime pickup and settings validation');
+}finally{await rm(dir,{recursive:true,force:true})}
