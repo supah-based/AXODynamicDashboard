@@ -1,0 +1,19 @@
+[Unit]
+Description=Back up isolated AXO Streams PostgreSQL cache
+Requires=axo-streams-postgres.service
+After=axo-streams-postgres.service
+
+[Service]
+Type=oneshot
+User=axostreams
+Group=axostreams
+ExecStart=/srv/axo-streams/db-deploy/backup.sh
+Nice=15
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/axo-streams-postgres
+RestrictAddressFamilies=AF_UNIX
+UMask=0077

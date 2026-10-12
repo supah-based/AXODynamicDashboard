@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily isolated AXO Streams PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=axo-streams-postgres-backup.service
+
+[Install]
+WantedBy=timers.target
