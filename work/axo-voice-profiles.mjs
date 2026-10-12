@@ -4,7 +4,7 @@ export function createVoiceProfiles({now=Date.now,serverConfigured=()=>Boolean(p
  const sessions=new Map(),ttl=6*60*60*1000;
  function owner(req,res){const name='axo-voice-browser-'+String(req.headers.host||'').split(':').at(-1),cookies=String(req.headers.cookie||'').split(';').map(s=>s.trim()),value=cookies.find(s=>s.startsWith(name+'='))?.slice(name.length+1);let id=/^[a-f0-9]{48}$/.test(value||'')?value:null;
   for(const [key,item]of sessions)if(now()-item.at>ttl)sessions.delete(key);
-  if(!id||!sessions.has(id)){if(sessions.size>=128)throw Error('Local voice profile capacity reached. Try again later.');id=randomBytes(24).toString('hex');sessions.set(id,{at:now(),key:null});res.setHeader('Set-Cookie',name+'='+id+'; HttpOnly; SameSite=Strict; Path=/; Max-Age='+ttl/1000)}sessions.get(id).at=now();return id;
+  if(!id||!sessions.has(id)){if(sessions.size>=128)throw Error('Local voice profile capacity reached. Try again later.');id=randomBytes(24).toString('hex');sessions.set(id,{at:now(),key:null});res.setHeader('Set-Cookie',name+'='+id+'; HttpOnly; SameSite=Strict; Path=/; Max-Age='+ttl/1000+(String(process.env.AXO_PUBLIC_ORIGIN||'').startsWith('https://')?'; Secure':''))}sessions.get(id).at=now();return id;
  }
  const credential=id=>sessions.get(id)?.key||null;
  const status=id=>({personalKeyConfigured:Boolean(credential(id)),serverKeyConfigured:serverConfigured(),source:credential(id)?'personal':serverConfigured()?'shared':'unavailable',storage:'Server memory for this browser session; re-enter after server restart or six hours of inactivity.',scope:'Voice only; typed Ask Axo keeps its existing provider.'});
