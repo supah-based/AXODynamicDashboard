@@ -1,0 +1,33 @@
+[Unit]
+Description=Isolated AXO Streams PostgreSQL cache
+After=local-fs.target
+Before=pm2-root.service
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+SupplementaryGroups=axostreams
+RuntimeDirectory=axo-streams-postgres
+RuntimeDirectoryMode=0775
+ExecStart=/usr/lib/postgresql/16/bin/postgres -D /var/lib/axo-streams-postgres -c config_file=/etc/axo-streams-postgres/postgresql.conf
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGINT
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/axo-streams-postgres /run/axo-streams-postgres
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=512M
+TasksMax=64
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
