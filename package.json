@@ -1,0 +1,28 @@
+{
+  "name": "axo-local-research-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --use-system-ca work/axo-server.mjs",
+    "test:core": "node work/test-access.mjs && node work/test-chain-research.mjs && node work/test-news.mjs && node work/test-history.mjs && node work/test-based.mjs && node work/test-ai.mjs && node work/test-launchpads.mjs && node work/test-header-sources.mjs && node work/test-social.mjs && node work/test-credit-preview.mjs",
+    "test:browser": "node work/test-chain-browser.mjs && node work/test-feedback-browser.mjs && node work/test-token-header.mjs && node work/test-launchpad-browser.mjs && node work/test-social-browser.mjs && node work/test-credits-browser.mjs && node work/test-watch-stream.mjs",
+    "test:compact-feedback": "node work/test-compact-feedback.mjs",
+    "test:radio": "node work/test-radio.mjs && node work/test-radio-browser.mjs",
+    "test:utility": "node work/test-utility.mjs",
+    "test:paper": "node work/test-paper.mjs && node work/test-paper-browser.mjs",
+    "test:watch-overview": "node work/test-watch-overview.mjs",
+    "test:dislike": "node work/test-dislike.mjs"
+  },
+  "dependencies": {
+    "@metamask/connect-solana": "^2.1.1",
+    "@solana/web3.js": "^1.99.0",
+    "bs58": "^6.0.0",
+    "esbuild": "^0.28.2",
+    "playwright": "1.62.1",
+    "sax": "1.6.1"
+  }
+}

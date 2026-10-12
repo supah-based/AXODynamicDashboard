@@ -1,0 +1,32 @@
+{
+  "solana": {
+    "name": "Solana",
+    "color": "#8b5cf6",
+    "secondary": "#14b8a6",
+    "mark": "◎"
+  },
+  "base": {
+    "name": "Base",
+    "color": "#2563eb",
+    "secondary": "#2563eb",
+    "mark": "●"
+  },
+  "bsc": {
+    "name": "BNB Chain",
+    "color": "#b88700",
+    "secondary": "#eab308",
+    "mark": "◇"
+  },
+  "robinhood": {
+    "name": "Robinhood",
+    "color": "#168b47",
+    "secondary": "#34d399",
+    "mark": "↗"
+  },
+  "arc": {
+    "name": "Arc",
+    "color": "#468977",
+    "secondary": "#64b39b",
+    "mark": "A"
+  }
+}

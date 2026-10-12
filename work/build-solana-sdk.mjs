@@ -1,0 +1,1 @@
+import {build} from 'esbuild';await build({entryPoints:['work/axo-solana-sdk-entry.js'],outfile:'work/axo-solana-sdk.bundle.js',bundle:true,platform:'browser',format:'esm',minify:true,target:'es2022',legalComments:'linked'});console.log('Built locally bundled official MetaMask Solana client');

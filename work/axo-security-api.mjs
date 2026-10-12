@@ -1,0 +1,32 @@
+import {publicSources} from './axo-source-cache.mjs';
+import {numberOrNull} from './axo-project-model.mjs';
+const ids={base:'8453',bsc:'56',ethereum:'1',arc:'5042',robinhood:'4663'};
+const valid=(v,sol)=>typeof v==='string'&&(sol?/^[1-9A-HJ-NP-Za-km-z]{32,44}$/:/^0x[a-fA-F0-9]{40}$/).test(v);
+const fraction=v=>{const n=numberOrNull(v);return n!==null&&n>=0&&n<=1?n:null};
+const count=v=>{const n=numberOrNull(v);return Number.isSafeInteger(n)&&n>=0?n:null};
+const bit=v=>v==='1'||v===1?'1':v==='0'||v===0?'0':null;
+export function normalizeSecurity(token,chain,address,receivedAt){
+ const sol=chain==='solana',fields=sol?{mintable:'Mint authority enabled',freezable:'Freeze authority enabled',non_transferable:'Non-transferable',balance_mutable_authority:'Balance mutable',closable:'Token closable',transfer_fee_upgradable:'Transfer fee upgradable',transfer_hook_upgradable:'Transfer hook upgradable'}:{is_honeypot:'Honeypot flag',cannot_sell_all:'Cannot sell all',is_blacklisted:'Blacklist capability',transfer_pausable:'Transfer pausable',hidden_owner:'Hidden owner',owner_change_balance:'Owner can change balances',can_take_back_ownership:'Ownership reclaimable',is_mintable:'Mint function',slippage_modifiable:'Tax modifiable',is_proxy:'Proxy contract'};
+ const checks=Object.entries(fields).map(([key,label])=>({key,label,value:bit(sol&&typeof token[key]==='object'?token[key]?.status:token[key])}));
+ const supply=numberOrNull(token.total_supply),seen=new Set();
+ const raw=Array.isArray(token.holders)?token.holders.slice(0,10):[];
+ const holders=raw.flatMap(h=>{const account=sol?h.token_account:h.address;if(!valid(account,sol)||seen.has(sol?account:account.toLowerCase()))return [];seen.add(sol?account:account.toLowerCase());let share=fraction(h.percent);
+  // Solana's public docs do not specify the percent scale. Accept a fraction only
+  // when its balance/total-supply ratio corroborates the units; never guess.
+  if(sol){const balance=numberOrNull(h.balance),ratio=supply>0&&balance!==null?balance/supply:null;if(ratio===null||share===null||Math.abs(ratio-share)>Math.max(.00001,ratio*.01))share=null}
+  return [{address:account,share,tag:typeof h.tag==='string'?h.tag.slice(0,70):null}];});
+ const sum=holders.reduce((n,h)=>n+(h.share??0),0),complete=holders.length>0&&holders.length===raw.length&&holders.every(h=>h.share!==null)&&sum<=1.00001;
+ const creatorAddress=!sol&&valid(token.creator_address,false)?token.creator_address:null;
+ return {schemaVersion:2,status:'available',chain,address,receivedAt,source:'GoPlus',checks,holderCount:count(token.holder_count),holders,concentration:complete?{share:Math.min(sum,1),addresses:holders.length,exclusions:'None; pool, burn, exchange and locked addresses may be included.',denominator:'Provider-reported total token supply'}:null,creator:creatorAddress?{address:creatorAddress,share:fraction(token.creator_percent),attribution:'Provider-reported creator; direct address only, not linked wallets or team holdings.'}:null,verification:sol?null:bit(token.is_open_source),buyTax:sol?null:fraction(token.buy_tax),sellTax:sol?null:fraction(token.sell_tax),message:'Automated provider observations; incomplete coverage, not a safety rating.',coverage:sol?'Solana beta; source verification and creator holdings are not inferred.':'EVM source availability is not an audit or implementation verification.'};
+}
+export function createSecurityApi({fetchImpl=fetch,now=Date.now,observeHolders=async d=>d}={}){
+ const cache=new Map(),pending=new Map(),calls=[];let active=0;const queue=[];
+ async function security({chain,address}){
+  const sol=chain==='solana';if(!valid(address,sol)||(!sol&&!ids[chain]))return {status:'unsupported',chain,address,message:'GoPlus coverage has not been verified for this chain. Contract and holder evidence remain unknown.'};
+  const key=chain+':'+(sol?address:address.toLowerCase()),hit=cache.get(key);if(hit&&now()-hit.at<300000)return observeHolders(hit.data);if(pending.has(key))return pending.get(key);
+  while(calls.length&&now()-calls[0]>=60000)calls.shift();if(calls.length>=20)return {status:'unavailable',chain,address,message:'Public checks are rate limited. Retry in a minute.'};calls.push(now());
+  const job=(async()=>{if(active>=2)await new Promise(r=>queue.push(r));active++;try{const url='https://api.gopluslabs.io/api/v1/'+(sol?'solana/token_security':'token_security/'+ids[chain])+'?contract_addresses='+encodeURIComponent(address);let d,at=now();if(fetchImpl===fetch){const result=await publicSources.get(url,{ttl:300000});d=result.data;at=result.at}else{const r=await fetchImpl(url,{signal:AbortSignal.timeout(18000)});if(!r.ok)throw new Error('Public contract checks are unavailable.');d=await r.json()}const entry=Object.entries(d.result||{}).find(([k])=>sol?k===address:k.toLowerCase()===address.toLowerCase()),token=entry?.[1];const data=token&&typeof token==='object'&&!Array.isArray(token)&&Object.keys(token).length?normalizeSecurity(token,chain,address,at):{status:'unavailable',chain,address,message:'No evidence returned for this exact token.'};data.sourceUrl=url;cache.set(key,{at:now(),data});if(cache.size>100)cache.delete(cache.keys().next().value);return observeHolders({...data,sourceUrl:url})}catch(e){const data={status:'unavailable',chain,address,source:'GoPlus',message:'Provider unavailable; prior source flags require review.'};cache.set(key,{at:now(),data});return data}finally{active--;queue.shift()?.()}})();pending.set(key,job);try{return await job}finally{pending.delete(key)}
+ }
+ async function handle(req,res,url){if(url.pathname!=='/api/security')return false;let data,status=200;try{if(req.method!=='GET'){status=405;throw new Error('GET required')}data=await security(Object.fromEntries(url.searchParams))}catch(e){data={status:'unavailable',message:e.message};status=status===405?405:502}res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));return true}
+ return {security,handle,local:p=>cache.get(p.chain+':'+(p.chain==='solana'?p.address:String(p.address).toLowerCase()))?.data||null};
+}

@@ -1,0 +1,42 @@
+import {runtimeDependency} from './axo-runtime.mjs';const {chromium}=runtimeDependency('playwright');
+import assert from 'node:assert/strict';
+const root='http://127.0.0.1:43187';
+const browser=await chromium.launch({...(process.env.AXO_BROWSER_CHANNEL==='chromium'?{}:{channel:process.env.AXO_BROWSER_CHANNEL||'msedge'}),headless:true});
+try{
+const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const addr=i=>'0x'+i.toString(16).padStart(40,'0');
+const p={id:'base:'+addr(2),chain:'base',address:addr(1),pair:addr(2),name:'Browser fixture',symbol:'TEST',dex:'test',quote:'USD',price:1.25,marketCap:0,fdv:null,liquidity:200000,volume1:60000,volume6:160000,volume24:320000,volume5:0,change1:5,changes:{m5:0,h1:5,h6:null,h24:-3},buys:0,sells:5,createdAt:Date.now()-86400000,seenAt:Date.now(),url:'https://dexscreener.com/base/'+addr(2)};
+const second={...p,id:'base:'+addr(4),address:addr(3),pair:addr(4),symbol:'OTHER'};
+const dashboard=await fetch(root+'/api/dashboard').then(r=>r.json());dashboard.feeds.launches={status:'live',receivedAt:Date.now(),data:{items:[p,second]}};
+await page.route('**/api/dashboard',route=>route.fulfill({json:dashboard}));
+let chartCalls=0,securityCalls=0;const securityRoutes=[];
+await page.route('**/api/ohlcv?*',async route=>{const q=Object.fromEntries(new URL(route.request().url()).searchParams);chartCalls++;await route.fulfill({json:{...q,status:'available',timeframe:'1h',bucketSeconds:3600,candles:[[1791580000,1,2,.5,1.5,4],[1791590800,1.5,2,1,1.1,0]],receivedAt:Date.now()}})});
+await page.route('**/api/project?*',async route=>{const address=new URL(route.request().url()).searchParams.get('address');await route.fulfill({json:{receivedAt:Date.now(),pools:[address===p.address?p:second]}})});
+await page.route('**/api/security?*',route=>{securityCalls++;securityRoutes.push(route)});
+await page.goto(root);await page.waitForSelector('.pc-card');
+await page.addStyleTag({content:'.card{transition:none!important;animation:none!important}'});
+await page.evaluate(({p,second})=>{snapshot.feeds.launches={status:'live',receivedAt:Date.now(),data:{items:[p,second]}};axoMiniCalls.length=0;axoWatch=[];axoFocusTopic='launches';render(true)}, {p,second});
+const card=page.locator('[data-card="project-'+p.id+'"]');await card.scrollIntoViewIfNeeded();await card.locator('.pc-mini svg').waitFor();
+assert.equal(securityCalls,0,'Security is strictly on demand');
+await card.locator('[data-pc-period="m5"]').click();assert.match(await card.locator('.pc-change').innerText(),/0\.0%.*5m/);assert.equal(await card.locator('[data-pc-period="m5"]').getAttribute('aria-pressed'),'true');
+await card.locator('[data-pc-period="m5"]').evaluate(el=>{window.fixtureControl=el;el.focus()});
+await page.evaluate(()=>{snapshot.feeds.launches.data.items[0].price=1.3;render(true)});
+assert.equal(await page.evaluate(()=>document.activeElement===window.fixtureControl&&window.fixtureControl.isConnected),true,'Feed update preserves focused button identity');
+assert.match(await card.locator('.pc-metrics').innerText(),/Mkt cap\n\$0\.00/);assert.match(await card.locator('.pc-metrics').innerText(),/FDV\n—/);
+await card.locator('[data-watch]').click();assert.equal(await card.locator('[data-watch]').getAttribute('aria-pressed'),'true');assert.ok(await page.evaluate(()=>JSON.parse(localStorage.getItem('axo-watchlist-v1')).some(p=>p.symbol==='TEST')));
+await card.locator('[data-save-metric]').click();assert.ok(await page.evaluate(()=>JSON.parse(localStorage.getItem('axo-saved-metrics-v1')).some(p=>p.project?.symbol==='TEST')));
+await card.locator('[data-expand]').click();await card.locator('.pc-deep-grid').waitFor();assert.match(await card.locator('.pc-deep-grid').innerText(),/3\.00×/);assert.match(await card.locator('.pc-deep-grid').innerText(),/0\.30×/);
+await card.locator('[data-pc-alert]').click();await page.locator('#axoAlertThreshold').fill('2');await page.locator('#axoAlertForm button[type=submit]').click();assert.equal(await page.evaluate(()=>axoAlertRules[0].pool),p.pair);await page.locator('#close').click();
+await card.locator('.pc-security [data-pc-security]').click();await page.waitForFunction(()=>document.querySelector('#pcSecurityLoading'));await page.locator('#close').click();
+const card2=page.locator('[data-card="project-'+second.id+'"]');await card2.locator('[data-pc-security]').click();
+while(securityRoutes.length<2)await new Promise(r=>setTimeout(r,25));
+const response=x=>({status:'available',chain:x.chain,address:x.address,receivedAt:Date.now(),checks:[{label:'Mint function',value:'0'}],holderCount:1234,verification:null,concentration:null,creator:null,message:'Fixture evidence',coverage:'Fixture coverage'});
+await securityRoutes[0].fulfill({json:response(p)});await page.waitForTimeout(100);assert.match(await page.locator('#pcSecurityLoading').innerText(),/OTHER/,'Earlier token must not populate current token drawer');
+await securityRoutes[1].fulfill({json:response(second)});await page.waitForFunction(()=>!document.querySelector('#pcSecurityLoading'));assert.match(await page.locator('#detail').innerText(),/OTHER/);await page.locator('#close').click();
+await card2.locator('[data-pc-security]').click();await page.waitForFunction(()=>!document.querySelector('#pcSecurityLoading'));assert.equal(securityCalls,2,'Repeated checks reuse client cache');await page.locator('#close').click();
+await card.locator('[data-expand]').click();await card.scrollIntoViewIfNeeded();
+const callsBefore=chartCalls;await page.evaluate(()=>{for(const d of axoMiniCharts.values())d.fetched=Date.now()-130000;axoMiniCalls.length=0;axoRefreshVisibleMini()});await page.waitForTimeout(100);assert.ok(chartCalls>callsBefore,'Stationary visible cards refresh after TTL');
+await page.evaluate(()=>{for(const d of axoMiniCharts.values())d.fetched=Date.now()-130000;axoMiniCalls.splice(0,axoMiniCalls.length,...Array(6).fill(Date.now()));axoRefreshVisibleMini()});const budgetCalls=chartCalls;await page.waitForTimeout(60);assert.equal(chartCalls,budgetCalls);await page.evaluate(()=>{axoMiniCalls.fill(Date.now()-61000);axoRefreshVisibleMini()});await page.waitForTimeout(100);assert.ok(chartCalls>budgetCalls,'Budget-limited cards retry on subsequent visible refresh');
+for(const width of [1440,390,320]){await page.setViewportSize({width,height:1000});await card.scrollIntoViewIfNeeded();await page.waitForTimeout(60);assert.equal(await card.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'No internal card overflow at '+width);const boxes=await page.locator('#board>.card').evaluateAll(els=>els.map(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}}));for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];assert.ok(a.x+a.w<=b.x+1||b.x+b.w<=a.x+1||a.y+a.h<=b.y+1||b.y+b.h<=a.y+1,'Masonry cards overlap at '+width)}}
+assert.deepEqual(errors,[]);console.log('Real-browser checks passed: keyboard focus through refresh, selected periods, zero/missing, watch/keep/alert persistence, research details, exact-token security race/cache, lazy chart refresh/budget retry, and nonoverlapping responsive masonry at 1440/390/320px.');
+}finally{await browser.close()}

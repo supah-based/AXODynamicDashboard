@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {normalizePair,numberOrNull} from './axo-project-model.mjs';
+import {normalizeSecurity,createSecurityApi} from './axo-security-api.mjs';
+const address='0x'+'1'.repeat(40),pool='0x'+'2'.repeat(40);
+const n=normalizePair({chainId:'base',pairAddress:pool,baseToken:{address,symbol:'X'},priceUsd:'0',marketCap:0,fdv:'9000',liquidity:{usd:''},volume:{m5:'0',h1:12,h6:null},priceChange:{m5:0,h1:-2,h6:'4',h24:''},txns:{h1:{buys:0,sells:null},m5:{buys:'2',sells:-1}},boosts:{active:0},info:{imageUrl:'https://cdn.dexscreener.com/a.png',websites:[{url:'javascript:alert(1)'},{url:'https://example.com'}]}},123);
+assert.equal(n.price,0);assert.equal(n.marketCap,0);assert.equal(n.fdv,9000);assert.equal(n.liquidity,null);assert.equal(n.volume5,0);assert.equal(n.volume6,null);assert.equal(n.changes.m5,0);assert.equal(n.changes.h24,null);assert.equal(n.buys,0);assert.equal(n.sells,null);assert.equal(n.transactions.m5.sells,null);assert.equal(n.seenAt,123);assert.equal(n.id,'base:'+pool);assert.equal(n.websites.length,1);
+for(const v of [null,undefined,'',' ',true,{},Infinity])assert.equal(numberOrNull(v),null);
+assert.equal(normalizePair({info:{imageUrl:'https://arbitrary.example/pixel'}}).imageUrl,null);
+const token={holder_count:'0',holders:[{address,percent:'0.2',tag:'Pool'},{address:pool,percent:'0.05'}],creator_address:address,creator_percent:'0',owner_percent:'.9',is_open_source:'',is_mintable:'0',is_honeypot:'1',buy_tax:'0',sell_tax:'.02'};
+const s=normalizeSecurity(token,'base',address,400);assert.equal(s.holderCount,0);assert.equal(s.concentration.share,.25);assert.match(s.concentration.exclusions,/None/);assert.equal(s.creator.share,0);assert.equal(s.verification,null);assert.equal(s.buyTax,0);assert.equal(s.sellTax,.02);assert.equal(s.checks.find(c=>c.key==='is_proxy').value,null);
+assert.equal(normalizeSecurity({...token,holders:[{address,percent:15}]},'base',address,400).concentration,null);
+assert.equal(normalizeSecurity({...token,holders:[{address,percent:'.1'},{address,percent:'.1'}]},'base',address,400).concentration,null);
+const sol='So11111111111111111111111111111111111111112';
+const ss=normalizeSecurity({total_supply:'1000',holders:[{token_account:sol,balance:'100',percent:'.1'}],mintable:{status:'0'},freezable:{status:'1'},price:'6000',creator:[{address:sol}]},'solana',sol,500);
+assert.equal(ss.concentration.share,.1);assert.equal(ss.creator,null);assert.equal(ss.verification,null);assert.equal(ss.price,undefined);assert.equal(ss.checks.find(c=>c.key==='mintable').value,'0');
+assert.equal(normalizeSecurity({holders:[{token_account:sol,percent:'.1'}]},'solana',sol,500).concentration,null,'Do not guess Solana share units without supply/balance corroboration');
+let calls=0,active=0,maxActive=0,now=1000;
+const api=createSecurityApi({now:()=>now,fetchImpl:async url=>{calls++;active++;maxActive=Math.max(maxActive,active);await new Promise(r=>setTimeout(r,5));active--;const a=new URL(url).searchParams.get('contract_addresses');return {ok:true,json:async()=>({result:{[a]:token}})}}});
+await Promise.all(Array.from({length:4},()=>api.security({chain:'base',address})));assert.equal(calls,1,'Deduplicate in flight');await api.security({chain:'base',address});assert.equal(calls,1,'Cache for five minutes');now+=300001;await api.security({chain:'base',address});assert.equal(calls,2);
+await Promise.all(Array.from({length:22},(_,i)=>api.security({chain:'base',address:'0x'+(i+10).toString(16).padStart(40,'0')})));assert.ok(maxActive<=2);assert.equal(calls,21,'Twenty provider calls per minute');const before=calls;assert.equal((await api.security({chain:'arc',address})).status,'unsupported');assert.equal(calls,before);
+const wrong=createSecurityApi({fetchImpl:async()=>({ok:true,json:async()=>({result:{[pool]:token}})})});assert.equal((await wrong.security({chain:'base',address})).status,'unavailable');
+console.log('Project data tests passed: zero/missing, USD and ratios, market cap vs FDV, transaction windows, image/link validation, exact security identity, chain schemas, concentration exclusions, creator/owner separation, caching, deduplication and limits.');
+
+assert.equal(normalizePair({info:{header:'https://cdn.dexscreener.com/fixture-banner.png'}}).bannerUrl,'https://cdn.dexscreener.com/fixture-banner.png');assert.equal(normalizePair({info:{header:'https://unrelated.example/banner.png'}}).bannerUrl,null);assert.equal(normalizePair({}).bannerUrl,null);

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {createHistoryApi,cleanCandles,weeklyCandles} from './axo-history-api.mjs';
+const address='0x'+'1'.repeat(40),pool='0x'+'2'.repeat(40),rows=[[1725235200,1,3,.5,2,50],[1725321600,2,4,1,3,60]];
+assert.equal(cleanCandles([[0,1,2,1,1,0],[5,2,1,3,1,0],...rows,...rows]).length,2);assert.deepEqual(weeklyCandles(rows),[[1725235200,1,4,.5,3,110,2]]);
+let urls=[];const api=createHistoryApi({now:()=>2000,fetchImpl:async url=>{urls.push(url);return {ok:true,json:async()=>url.includes('ohlcv')?{data:{attributes:{ohlcv_list:rows}}}:{data:{attributes:{address:pool},relationships:{base_token:{data:{id:'base_token'}},quote_token:{data:{id:'quote_token'}}}},included:[{id:'base_token',attributes:{address}}]}}}});
+const d=await api.history({chain:'base',address,pool,timeframe:'15m'});assert.equal(d.currency,'USD');assert.equal(d.candles.length,2);assert.match(urls[1],/minute\?aggregate=15/);assert.ok(urls[1].includes('token='+address));assert.ok(urls[1].includes('include_empty_intervals=false'));await api.history({chain:'base',address,pool,timeframe:'15m'});assert.equal(urls.length,2,'cached requests do not consume extra provider calls');
+const week=await api.history({chain:'base',address,pool,timeframe:'1w'});assert.equal(week.candles.length,1);assert.match(week.notes,/partial/);
+const rh=await api.history({chain:'robinhood',address,pool,timeframe:'1h'});assert.equal(rh.status,'available');assert.equal(rh.network,'robinhood');assert.ok(urls.some(u=>u.includes('/networks/robinhood/pools/'+pool+'/ohlcv/hour')));
+await assert.rejects(api.history({chain:'base',address:'0x'+'3'.repeat(40),pool,timeframe:'1h'}),/not verified/);assert.equal((await api.history({chain:'arc',address,pool})).status,'unavailable');
+await assert.rejects(api.history({chain:'base',address,pool,timeframe:'bad'}),/valid/);
+const failed=createHistoryApi({fetchImpl:async()=>({ok:false,status:429})});await assert.rejects(failed.history({chain:'base',address,pool}),/rate limited/);
+console.log('OHLCV tests passed: identity verification, real weekly aggregation, malformed candles, no filled gaps, timeframes, cache, unsupported chain and provider failures.');

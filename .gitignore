@@ -1,0 +1,53 @@
+
+# Local credentials: never commit or publish
+.env
+.env.*
+!.env.example
+work/private/
+
+# Installed dependencies and local runtime artifacts
+node_modules/
+*.log
+work/*-cache.json
+work/*-history.json
+work/*-state.json
+work/launchpad-research/
+.DS_Store
+Thumbs.db
+
+# This workspace also contains one-off research and development artifacts.
+# Version the application and tests; keep captures and local state on this machine.
+/work/*
+!/work/axo-*.mjs
+!/work/axo-*.js
+!/work/axo-*.cjs
+!/work/axo-*.css
+!/work/axo-profile-page.html
+!/work/wallet-api.mjs
+!/work/build-solana-sdk.mjs
+!/work/test-*.mjs
+!/work/axo-chain-palette.json
+!/work/axo-brand-manifest.json
+!/work/axo-stablecoin-directory.json
+!/work/axo-solana-sdk.bundle.js.LEGAL.txt
+!/work/*-fixture.json
+!/work/based-direct-*.json
+!/work/axo-public-rewards-2.json
+!/work/chain-probe-*.json
+!/work/chain-info-base.json
+!/work/pump-probe-gecko.json
+!/work/pump-probe-swaps.json
+!/work/news-*.xml
+!/work/dom-test/
+/work/dom-test/*
+!/work/dom-test/package.json
+!/work/dom-test/pnpm-lock.yaml
+/work/axo-source-*.js
+/work/*fragment.js
+/work/*-probe-provider.mjs
+
+/outputs/*
+!/outputs/axo-live-dashboard.html
+!/outputs/assets/
+!/outputs/axo-brand-set/
+/outputs/axo-brand-set/manifest.json

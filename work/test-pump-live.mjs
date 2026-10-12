@@ -1,0 +1,3 @@
+import {createActionApi} from './axo-action-api.mjs';
+import fs from 'node:fs/promises';
+const api=createActionApi();const d=await api.run({version:1,kind:'launchpads',question:'Pump fun New Growing Established',scope:{chains:[],protocol:'pumpfun'}},{requestId:'live-pump'});await fs.writeFile('work/pump-live-result.json',JSON.stringify(d,null,2));console.log(JSON.stringify({scope:d.action.scope,lists:Object.fromEntries(Object.entries(d.pump.lists).map(([k,v])=>[k,v.map(p=>({symbol:p.symbol,phase:p.phase,age:p.age,liq:p.liquidity,acc:p.acceleration}))])),observed:d.pump.observed,attributed:d.pump.attributed,sources:d.sources.map(s=>({status:s.status,error:s.error})),gaps:d.gaps}));

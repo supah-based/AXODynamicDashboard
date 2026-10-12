@@ -1,0 +1,2 @@
+export const uxChoices=['sources','compact','comparisons','matches'];
+export function uxContext(value){const choices=Array.isArray(value)?value.slice(-6).filter(x=>uxChoices.includes(x)):[];return choices.length?{source:'Explicit optional user feedback on this device',choices:[...new Set(choices)],scope:'Presentation preferences only. Never infer holdings, identity, wealth, risk tolerance or trade consent.'}:null}
