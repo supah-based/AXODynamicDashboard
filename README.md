@@ -54,3 +54,9 @@ AXO scores rank available research evidence; they are not probabilities of profi
 This is a local application, not a hardened public multi-user deployment. Browser-session isolation is not authenticated account or wallet ownership. Shared ecosystem editing and whale-tier permissions still require server-verified identity and authorization.
 
 MIT licensed; see [LICENSE](LICENSE).
+
+## Wallet-gated administration
+
+The exact EVM controller wallet is the only default admin; override with `AXO_ADMIN_WALLET`. Connect that account and select **Admin** to sign a short-lived, origin-bound, nonce-based message (no transaction authority). Admin actions require a session and CSRF token; logging out or changing accounts revokes the browser session. The admin API requires a matching `AXO_PUBLIC_ORIGIN`; configure the reverse proxy to allow `/api/admin/*` POST/GET and `/admin-ui.js` only after independently reviewing the host policy. This repository change does **not** modify Caddy or restart the service.
+
+Managed settings and the separately stored shared OpenAI voice key are written atomically under `/var/lib/axo-streams` with mode 0600. Set directory ownership for the runtime user and restrict directory access. The key is checked through the OpenAI model-retrieval endpoint before activation (authentication/model availability, not a billed voice-session guarantee), is never returned, and is read at request time without a restart. If no managed key exists, `OPENAI_API_KEY` remains the process fallback. ChatGPT/Codex billing is separate from OpenAI API usage. Settings affect new standard voice sessions and radio; Whale timer/quota semantics and shared capacity remain unchanged.
