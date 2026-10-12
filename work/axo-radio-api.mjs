@@ -1,3 +1,4 @@
+import {isAxoOrigin} from './axo-request-origin.mjs';
 import {createHash,randomUUID} from 'node:crypto';
 import {codexAnswer} from './axo-codex-provider.mjs';
 export const RADIO_MODEL='gpt-audio-1.5',RADIO_VOICE='verse';
@@ -125,7 +126,7 @@ export function createRadioStation({getState,getPools,recordUsage,editor=codexAn
  async function handle(req,res,u){if(!u.pathname.startsWith('/api/radio/'))return false;try{
   if(u.pathname==='/api/radio/status'&&req.method==='GET'){send(res,200,status());return true}
   const match=u.pathname.match(/^\/api\/radio\/audio\/([a-f0-9-]{36})$/);if(match&&req.method==='GET'){prune();const t=tracks.find(t=>t.id===match[1]);if(!t){send(res,404,{error:'This recording has expired. Rejoin the current station timeline.'});return true}res.writeHead(200,{'content-type':'audio/wav','content-length':t.bytes.length,'cache-control':'public, max-age=600, immutable','x-axo-ai-generated':'true'});res.end(t.bytes);return true}
-  if(req.method!=='POST')throw Object.assign(new Error('POST required.'),{status:405});if(req.headers.origin!=='http://'+req.headers.host||req.headers['x-axo-request']!=='1')throw Object.assign(new Error('Use the local dashboard for radio requests.'),{status:403});
+  if(req.method!=='POST')throw Object.assign(new Error('POST required.'),{status:405});if(!isAxoOrigin(req)||req.headers['x-axo-request']!=='1')throw Object.assign(new Error('Use the local dashboard for radio requests.'),{status:403});
   let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>1000)throw Object.assign(new Error('Listener request too large.'),{status:413})}let body;try{body=JSON.parse(raw||'{}')}catch{throw Object.assign(new Error('Invalid JSON.'),{status:400})}
   if(Object.keys(body).some(k=>k!=='listenerId'))throw Object.assign(new Error('The shared station accepts no personal stream, watchlist, account or question context.'),{status:400});
   if(u.pathname==='/api/radio/join')send(res,200,join());else if(u.pathname==='/api/radio/heartbeat')send(res,200,heartbeat(body.listenerId));else if(u.pathname==='/api/radio/leave')send(res,200,leave(body.listenerId));else send(res,404,{error:'Unknown station route.'});

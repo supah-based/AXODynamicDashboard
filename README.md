@@ -16,10 +16,34 @@ Open http://127.0.0.1:43187/?view=compact-intel. The server binds to loopback an
 Public market views work without private API keys. Optional services:
 
 - **Ask Axo / Luna research:** a locally installed and signed-in Codex CLI available as `codex`, or configured with `AXO_CODEX_PATH`.
-- **Live voice:** copy `.env.example` to `.env` and configure `OPENAI_API_KEY`. A personal voice key entered in Profile overrides the shared key for that browser session. Personal keys are held in server memory and must be entered again after a server restart.
+- **Live voice:** copy `.env.example` to `.env` and configure `OPENAI_API_KEY`. A personal voice key entered in Profile overrides the shared key for that browser session. Personal keys are held in server memory and must be entered again after a server restart. Both shared and personal voice keys require verified holder access.
 - **Argus launch events:** configure `AXO_BITQUERY_ACCESS_TOKEN` for the optional Bitquery source.
 
 Credentials belong in the local `.env` file or the process environment. Neither credentials nor local usage records are included in the repository.
+
+## Holder access and tiers
+
+Public streams remain open. Ask Axo text, planning and voice require an explicit Sign-In with Ethereum message and at least 1,000,000 AXO. Connecting an address alone grants no AI access. Signing in authorizes no transaction or token approval. Ownership verification currently supports standard EVM wallet message signatures; Solana and contract-wallet sign-in are not implemented.
+
+The server reads the exact AXO token balance on Robinhood, independently of the wallet's browsing network. It classifies exact integer token units, caches verified balances for up to one minute, and refuses missing, stale or mismatched evidence. Authentication uses an HttpOnly, SameSite cookie lasting two hours, with Secure cookies on the HTTPS origin. Sign-out and wallet changes clear browser access; active voice rechecks server access every minute and also checks after startup.
+
+| Tier | Minimum AXO | Backend AI requests/day | Voice minutes/day | Additional available utilities |
+| --- | ---: | ---: | ---: | --- |
+| Public | 0 | 0 | 0 | Browse public streams; existing browser-local tools |
+| Normal holder | 1,000,000 | 20 | 5 | Ask Axo and voice; conversational Watchlist, Favorites and local alert controls |
+| Improved | 2,500,000 | 60 | 15 | Custom research cards, comparisons, saved research streams and tracked-project actions |
+| Top | 5,000,000 | 120 | 30 | Larger daily service allowance |
+| Whale | 10,000,000 | 240 | 60 | Largest initial daily service allowance |
+
+These are initial service limits, separate from credit pricing and reward eligibility. Requests include planning attempts, so one question may consume multiple requests. Limits apply per verified wallet across browsers and reset at UTC midnight. Voice reserves at most five minutes per session, with unused seconds returned after successful hangup. Daily usage survives restarts in the ignored `work/private/holder-usage.json`; authentication sessions and personal voice keys do not. Keep that directory persistent and private on the VPS. Planned portfolio monitoring, recurring briefings, priority scheduling and shared launchpad publishing remain labeled unavailable.
+
+For the VPS reverse proxy, set `AXO_PUBLIC_ORIGIN` to the exact public HTTPS origin (default `https://streams.axo.vision`), preserve a supported Host header, and proxy to loopback. Requests from unrelated origins are rejected. This implementation uses one Node process and a local usage ledger; sharing quotas between multiple server processes or replicas requires a shared datastore. Existing browser workspaces and AXO Postgres account linking remain separate from wallet authentication.
+
+## Sparse education and current rewards
+
+An optional, dismissible AXO education card appears after eight data cards at most once per 24 hours in a browser. It rotates between tier utility, the exact AXO buy destination and current rewards. It does not become a project-page anchor.
+
+The rewards variant refreshes once per minute while the page is visible, using the ecosystem adapter's exact-token official configuration, Based.bid observations and reward relay feeds. It shows the current selected basket separately from lifetime tracker distributions, retains exact per-asset token amounts, and dates observations. Fee values come from current verified configuration and explicitly identify the buy trade denominator; no fixed 5% or 3% assumption is made. These feeds do not establish holder-paid totals, so confirmed holder payments remain unverified. Stale or missing values are shown as unavailable, and no reward or price gain is promised.
 
 ## Project layout
 
@@ -36,6 +60,8 @@ The `work` directory name is retained from development. Runtime caches, generate
 ```sh
 pnpm run test:core
 pnpm run test:browser
+pnpm run test:holders
+pnpm run test:utility
 node work/test-launchpad-direct.mjs
 node work/test-launchpad-pages.mjs
 node work/build-solana-sdk.mjs
@@ -51,6 +77,6 @@ Launchpad discovery includes eleven platform entries. Direct Pons, PAR, and Rayd
 
 AXO scores rank available research evidence; they are not probabilities of profit. Contract screening and available simulation results describe tested conditions. Portfolio daily P&L requires adequate balance and cash-flow history.
 
-This is a local application, not a hardened public multi-user deployment. Browser-session isolation is not authenticated account or wallet ownership. Shared ecosystem editing and whale-tier permissions still require server-verified identity and authorization.
+Wallet ownership and holder gating are now enforced for the protected AI endpoints. Other browser-session workspaces remain local prototypes. Shared ecosystem publishing and account linking still need their own ownership, validation and authorization flow; holding a Whale tier does not yet publish changes for everyone.
 
 MIT licensed; see [LICENSE](LICENSE).
