@@ -12,7 +12,7 @@ const server=http.createServer(async(req,res)=>{try{const u=new URL(req.url,'htt
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 async function proxy(route){const incoming=route.request(),headers=await incoming.allHeaders();return new Promise((resolve,reject)=>{const req=http.request('http://127.0.0.1:'+server.address().port+new URL(incoming.url()).pathname,{method:incoming.method(),headers:{...headers,host:'127.0.0.1:43187',connection:'close'}},res=>{let body='';res.on('data',c=>body+=c);res.on('end',()=>{const h={'content-type':'application/json'};if(res.headers['set-cookie'])h['set-cookie']=res.headers['set-cookie'][0];resolve(route.fulfill({status:res.statusCode,headers:h,body}));});});req.on('error',reject);req.end(incoming.postData()||undefined);});}
 function rewardFixture(){const now=Date.now();return {identity:{officialMatch:true,chainId:4663,address:AXO.address},fees:{observedAt:now,buyBps:500,rewardBps:300},rewards:{observedAt:now,catalogAt:now,minimumAxo:'1000000',eligibleHolders:42,selected:[{address:'0x'+'1'.repeat(40),symbol:'SELECTED'}],assets:[{address:'0x'+'2'.repeat(40),symbol:'DISTRIBUTED',distributed:rewardAmount}],eventHistoryComplete:false}};}
-const browser=await chromium.launch({channel:process.env.AXO_BROWSER_CHANNEL||'msedge',headless:true});
+const browser=await chromium.launch({...(process.env.AXO_BROWSER_EXECUTABLE?{executablePath:process.env.AXO_BROWSER_EXECUTABLE}:{channel:process.env.AXO_BROWSER_CHANNEL||'msedge'}),headless:true});
 try{
  const context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'}),p=await context.newPage(),errors=[];
  p.on('pageerror',e=>errors.push(e.message));
