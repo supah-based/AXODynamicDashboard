@@ -43,6 +43,8 @@ For the VPS reverse proxy, set `AXO_PUBLIC_ORIGIN` to the exact public HTTPS ori
 
 One prominent, dismissible AXO education card appears near the start of eligible streams, after up to three data cards, and refreshes every 15 minutes while the dashboard is visible. It rotates between tier utility, the exact AXO buy destination and current rewards. Cards replace each other rather than accumulating; dismissal and reload preserve the cooldown. It does not become a project-page anchor or interrupt portfolio views.
 
+Each variant has a cinematic 3:1 AXO-and-Pets header tailored to its subject: utility access, finding the exact token, or selecting a reward basket. The illustrations are brand metaphors; current values and verified destinations remain in the card body. Header space is reserved before images load, and the ratio stays the same on mobile. Artwork and generation prompts are versioned with the application.
+
 The rewards variant refreshes once per minute while the page is visible, using the ecosystem adapter's exact-token official configuration, Based.bid observations and reward relay feeds. It shows the current selected basket separately from lifetime tracker distributions, retains exact per-asset token amounts, and dates observations. Fee values come from current verified configuration and explicitly identify the buy trade denominator; no fixed 5% or 3% assumption is made. These feeds do not establish holder-paid totals, so confirmed holder payments remain unverified. Stale or missing values are shown as unavailable, and no reward or price gain is promised.
 
 ## Project layout

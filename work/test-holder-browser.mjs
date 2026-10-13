@@ -33,7 +33,7 @@ try{
  assert.equal(await p.evaluate(()=>axoHolderRequire('voice')),true);
  assert.equal(await p.evaluate(()=>axoHolderRequire('customCards')),false);
  await p.evaluate(()=>axoAiPost('/api/ai/ask',{question:'Fixture'}));assert.equal(protectedCalls,1);await p.waitForFunction(()=>axoHolderAccess?.remaining.aiRequests===19);
- for(const theme of ['light','dark'])for(const width of [1440,390,320]){await p.setViewportSize({width,height:1100});await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);await p.waitForTimeout(100);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Holder panel overflow '+theme+' '+width);}
+ for(const theme of ['light','dark'])for(const width of [1440,390,320]){await p.setViewportSize({width,height:1100});await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);await p.waitForTimeout(100);const fit=await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1);if(!fit){await p.screenshot({path:'outputs/axo-education-overflow.png'});console.log(await p.evaluate(()=>[...document.querySelectorAll('body *')].map(e=>({tag:e.tagName,id:e.id,className:String(e.className),x:e.getBoundingClientRect().x,right:e.getBoundingClientRect().right})).filter(e=>e.x<-1||e.right>innerWidth+1).slice(0,12)));}assert.ok(fit,'Holder panel overflow '+theme+' '+width);}
  await p.screenshot({path:'outputs/axo-holder-access-mobile.png'});
  // A wallet account change immediately revokes the browser's access.
  await p.evaluate(()=>{axoWallet=null;axoWalletLabel();});await p.waitForFunction(()=>axoHolderAccess===null||axoHolderAccess.authenticated===false);assert.equal(await p.evaluate(()=>axoHolderRequire()),false);
@@ -46,10 +46,21 @@ try{
  // Dynamic rewards preserve exact amounts and distinguish selection, allocation and payment.
  await p.evaluate(async()=>{close();axoEducationShown?.node.remove();axoEducationShown=null;localStorage.removeItem(educationKey);axoStream={type:'home'};const board=$('board');board.replaceChildren();for(let i=0;i<9;i++){const node=document.createElement('article');node.className='card';node.textContent='Data card '+i;board.append(node);}await axoMaybeEducation();});
  await p.waitForSelector('.axo-education');assert.equal(await p.locator('.axo-education').count(),1);assert.equal(await p.locator('#board>.card').nth(3).getAttribute('data-card'),'axo-education');assert.equal(await p.locator('.axo-education').getAttribute('data-size'),'wide');
- await p.evaluate(async()=>{axoEducationShown.type=2;axoEducationShown.node.querySelector('.edu-content').innerHTML=await axoEducationMarkup(2);layout();});
+ // Each topic renders its own real banner, with a fixed panoramic ratio in both themes.
+ for(const type of [0,1,2]){
+  await p.evaluate(async type=>{const content=await axoEducationMarkup(type),shown=axoEducationShown;shown.node.remove();const node=axoEducationNode(type,content);axoEducationShown={...shown,node,type};const cards=[...$('board').children].filter(e=>e.matches('article.card'));$('board').insertBefore(node,cards[3]||null);layout();},type);
+  await p.waitForFunction(()=>{const img=document.querySelector('.axo-education .edu-header img');return img?.complete&&img.naturalWidth>0;});
+  assert.ok((await p.locator('.edu-header img').getAttribute('src')).endsWith(['tiers','buy','rewards'][type]+'-header-v1.png'));
+  for(const theme of ['light','dark'])for(const width of [1440,390,320]){
+   await p.setViewportSize({width,height:1100});await p.evaluate(theme=>{document.documentElement.dataset.theme=theme;layout();},theme);await p.waitForTimeout(100);
+   const box=await p.locator('.edu-header').boundingBox();assert.ok(Math.abs(box.width/box.height-3)<.02,'3:1 header '+type+' '+theme+' '+width);
+   assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Education overflow '+type+' '+theme+' '+width);
+   if(width===1440)assert.ok(await p.locator('.axo-education').evaluate(e=>e.classList.contains('wide-card')));
+   if(theme==='dark'&&width!==390)await p.locator('.axo-education').screenshot({path:'outputs/axo-education-'+['tiers','buy','rewards'][type]+(width===1440?'-desktop':'-mobile')+'.png'});
+  }
+ }
  let text=await p.locator('.axo-education').innerText();assert.match(text,/SELECTED/);assert.match(text,/DISTRIBUTED/);assert.match(text,/12\.345678901234567891/);assert.match(text,/Confirmed holder payments\s+Unverified/);assert.match(text,/Holder reward share of trade · buy\s+3%/);
- rewardAmount='99.123456789012345678';await p.evaluate(()=>axoRefreshRewardEducation());assert.match(await p.locator('.axo-education').innerText(),/99\.123456789012345678/);
- for(const width of [1440,390,320]){await p.setViewportSize({width,height:1100});await p.evaluate(()=>layout());await p.waitForTimeout(100);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Education overflow '+width);if(width===1440)assert.ok(await p.locator('.axo-education').evaluate(e=>e.classList.contains('wide-card')),'Education uses two masonry columns on desktop');}
+ const header=await p.locator('.edu-header img').getAttribute('src');rewardAmount='99.123456789012345678';await p.evaluate(()=>axoRefreshRewardEducation());assert.match(await p.locator('.axo-education').innerText(),/99\.123456789012345678/);assert.equal(await p.locator('.edu-header img').getAttribute('src'),header,'Reward refresh keeps the topic header');
  await p.locator('.axo-education').screenshot({path:'outputs/axo-rewards-education-mobile.png'});await p.locator('.edu-dismiss').click();await p.evaluate(()=>axoMaybeEducation());assert.equal(await p.locator('.axo-education').count(),0);
  const stored=await p.evaluate(()=>JSON.stringify({...localStorage}));assert.ok(!stored.includes('axo-holder-session'));assert.ok(!stored.includes('Sign in to Axo'));
  await p.reload();await p.waitForFunction(()=>typeof axoHolderPanel==='function');await p.evaluate(()=>axoMaybeEducation());assert.equal(await p.locator('.axo-education').count(),0,'Dismissed education does not return on reload within 15 minutes');
