@@ -8,11 +8,13 @@
   },
   "scripts": {
     "start": "node --use-system-ca work/axo-server.mjs",
+    "build:reown": "node work/build-reown.mjs",
     "test:core": "node work/test-access.mjs && node work/test-chain-research.mjs && node work/test-news.mjs && node work/test-history.mjs && node work/test-based.mjs && node work/test-ai.mjs && node work/test-launchpads.mjs && node work/test-header-sources.mjs && node work/test-social.mjs && node work/test-credit-preview.mjs",
     "test:browser": "node work/test-chain-browser.mjs && node work/test-feedback-browser.mjs && node work/test-token-header.mjs && node work/test-launchpad-browser.mjs && node work/test-social-browser.mjs && node work/test-credits-browser.mjs && node work/test-watch-stream.mjs",
     "test:compact-feedback": "node work/test-compact-feedback.mjs",
     "test:radio": "node work/test-radio.mjs && node work/test-radio-browser.mjs",
     "test:utility": "node work/test-holder-browser.mjs",
+    "test:reown-wallet": "node work/test-reown-wallet.mjs && node work/test-wallet-lifecycle.mjs",
     "test:holders": "node work/test-holder-auth.mjs && node work/test-holder-voice.mjs && node work/test-tier-plans.mjs && node work/test-reward-education.mjs && node work/test-voice-isolation.mjs",
     "test:paper": "node work/test-paper.mjs && node work/test-paper-browser.mjs",
     "test:watch-overview": "node work/test-watch-overview.mjs",
@@ -24,6 +26,8 @@
     "test:durable": "node work/test-durable-store.mjs"
   },
   "dependencies": {
+    "@reown/appkit": "1.8.22",
+    "@reown/appkit-adapter-ethers": "1.8.22",
     "@metamask/connect-solana": "^2.1.1",
     "@solana/web3.js": "^1.99.0",
     "bs58": "^6.0.0",

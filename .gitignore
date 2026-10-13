@@ -51,3 +51,5 @@ Thumbs.db
 !/outputs/assets/
 !/outputs/axo-brand-set/
 /outputs/axo-brand-set/manifest.json
+
+!/work/build-reown.mjs
