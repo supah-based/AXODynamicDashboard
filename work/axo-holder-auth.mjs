@@ -130,5 +130,6 @@ export function createHolderAuth({readHoldings, now = Date.now, usagePath = null
     } catch(e) {send(res,e.status||503,{error:e.message,code:e.code||'holder_access_unavailable'});return false;}
   }
   async function checkFeature(req,feature) {return access(req,feature);}
-  return {handle,guard,view,checkFeature};
+  async function checkWalletFeature(address,feature){if(!/^0x[a-f0-9]{40}$/.test(address||''))return false;const b=await balance(address);return HOLDER_LIMITS[b.tier.id][feature]===true;}
+  return {handle,guard,view,checkFeature,checkWalletFeature};
 }

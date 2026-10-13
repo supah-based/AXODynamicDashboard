@@ -49,6 +49,20 @@ Decorative masonry fillers use a separate set of twenty cinematic action scenes:
 
 The rewards variant refreshes once per minute while the page is visible, using the ecosystem adapter's exact-token official configuration, Based.bid observations and reward relay feeds. It shows the current selected basket separately from lifetime tracker distributions, retains exact per-asset token amounts, and dates observations. Fee values come from current verified configuration and explicitly identify the buy trade denominator; no fixed 5% or 3% assumption is made. These feeds do not establish holder-paid totals, so confirmed holder payments remain unverified. Stale or missing values are shown as unavailable, and no reward or price gain is promised.
 
+## Rebound research and Bounce cards
+
+Open **Rebound research** from the stream bar, or ask Axo to “Find rebound projects on Base” or “Add a rebound research card to this stream.” Reusable `rebound_radar` and `bounce_board` layouts work in the current stream or a named chain stream. Chain overviews and Discovery also surface the research; Discovery retains its active project filters. Public browsing reads cached research. A signed normal holder can request a source scan; adding or resuming a watch requires the Improved tier (2,500,000 AXO). Ask Axo can track, pause, resume and remove an exact project’s watch after research establishes eligibility.
+
+The initial screen requires a price at least 35% below the highest daily **close** across the previous 30 completed UTC days, pool liquidity of at least $100,000, 24-hour pool volume of at least $10,000, and commits on at least two distinct dates in the previous 30 days in a provider-linked repository. It excludes stablecoins, known bonding-curve venues and reported honeypot, sell-blocking or non-transferable tokens. A previously reported severe contract flag remains blocking until a fresh exact-token response explicitly clears that flag; an outage does not clear it. Unknown screening remains visible and is not a safety pass.
+
+Research requires 30 consecutive completed USD daily candles and 80 consecutive completed USD hourly candles for the exact chain, token and pool. Incomplete bars are ignored; missing intervals are not filled. The development adapter checks one provider-listed website when needed, then public GitHub metadata and up to 100 commits. Explicitly identified bots are excluded. A linked repository and commit count do not verify team ownership, product delivery, competence or continued funding; those gaps remain in each card. Neither the signal count nor the Axo score is a calibrated recovery probability.
+
+Bounce confirmation requires all seven observed conditions: the close is above the 20- and 50-hour averages; the 20-hour average is above the 50-hour average and rising versus six hours earlier; the last 24-hour low exceeds the preceding 24-hour low; the close exceeds the preceding 24-hour high; and mean USD trading volume over the last six hours is at least 1.5 times the preceding 24-hour mean. All conditions must hold on two newly observed consecutive closed hourly candles. The first snapshot is a baseline, not an alert. Duplicate polls, missing history and restart do not create a second confirmation. Each dated Bounce card preserves the triggering evidence and original dip; a 24-hour cooldown limits repeat alerts.
+
+The original dip thesis lasts 30 days, allowing an existing watch to follow repair even after the dip falls below 35%. An expired thesis does not alert; remove it, run fresh research and track again to establish a new baseline. Pool liquidity must retain at least 80% of its initial USD valuation and still meet the fixed minimum. This valuation comparison does not establish net capital flows. Monitoring checks fresh holdings, suspends on failed verification or tier loss, and stops when paused or removed. Watches and alerts are owned by the signed wallet across browsers and persist in the private `rebound-monitoring.json` under `AXO_RUNTIME_DIR`; preserve that directory on the VPS. Alerts appear as in-app Bounce cards and an unread stream badge, not email or OS notifications.
+
+Collection is a bounded sample, not a market census or a list of guaranteed winners. A scan takes up to two recent decliners and one high-volume pool per requested chain, keeps the deepest observed pool per token, and checks up to twelve exact projects. At most two projects are checked per minute; watches take priority and have a minimum fifteen-minute check interval. Shared provider budgets, missing coverage and server downtime can defer checks or miss a confirmation. The cards expose sample coverage, dates and unavailable sources rather than inventing candidates.
+
 ## Project layout
 
 - `work/axo-server.mjs`: server entry point and API routing.
@@ -66,12 +80,14 @@ pnpm run test:core
 pnpm run test:browser
 pnpm run test:holders
 pnpm run test:utility
+pnpm run test:rebounds
+pnpm run test:rebound-browser
 node work/test-launchpad-direct.mjs
 node work/test-launchpad-pages.mjs
 node work/build-solana-sdk.mjs
 ```
 
-The last command rebuilds the committed browser bundle for the Solana wallet integration. Some additional tests are historical development diagnostics requiring local captures, or live-provider probes that may require credentials and consume provider resources; inspect a test before running it. The optional DOM harness installs separately with `pnpm --dir work/dom-test install --frozen-lockfile`.
+The last command rebuilds the committed browser bundle for the Solana wallet integration. Rebound checks use synthetic source observations and a mock planner; they verify identity, evidence gaps, confirmation, ownership, persistence, current-stream layouts and mobile rendering, not trading performance or live Luna behavior. Some additional tests are historical development diagnostics requiring local captures, or live-provider probes that may require credentials and consume provider resources; inspect a test before running it. The optional DOM harness installs separately with `pnpm --dir work/dom-test install --frozen-lockfile`.
 
 ## Coverage and current limits
 

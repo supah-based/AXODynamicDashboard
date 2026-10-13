@@ -1,0 +1,8 @@
+import assert from 'node:assert/strict';
+import {createReboundDevelopment} from './axo-rebound-development.mjs';
+import {reboundFixture,fixtureNow} from './test-rebound-fixture.mjs';
+const f=reboundFixture(),urls=[];
+const development=createReboundDevelopment({now:()=>fixtureNow,investigate:async p=>({chain:p.chain,address:p.address,links:[{url:'https://fixture.example/project'}]}),readText:async()=>({data:'<a href="https://github.com/fixture/research">Source</a>',at:fixtureNow}),readJson:async url=>{urls.push(url);return {url,at:fixtureNow,data:url.includes('/commits?')?[{sha:'a'.repeat(40),author:{type:'User'},commit:{committer:{date:new Date(fixtureNow-86400000).toISOString()}}},{sha:'b'.repeat(40),author:{type:'Bot'},commit:{committer:{date:new Date(fixtureNow-2*86400000).toISOString()}}}]:{full_name:'fixture/research',archived:false}};}});
+const row=await development(f.project);assert.equal(row.github.commits.length,1);assert.ok(urls.some(u=>u.includes('per_page=100&since=')));assert.ok(row.links.some(l=>l.url==='https://github.com/fixture/research'));await development(f.project);assert.equal(urls.length,2,'Public evidence is cached');
+const bad=createReboundDevelopment({now:()=>fixtureNow,investigate:async()=>({...f.development,links:[{url:'https://github.com/fixture/research'}]}),readJson:async()=>({data:{full_name:'other/repository'}})});assert.equal((await bad(f.project)).github.status,'unavailable');
+console.log('PASS development evidence: only exact-token linked website/repository, canonical link, bounded thirty-day commit query, explicit bot exclusion, source caching and mismatched repository rejection.');

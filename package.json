@@ -18,7 +18,9 @@
     "test:watch-overview": "node work/test-watch-overview.mjs",
     "test:dislike": "node work/test-dislike.mjs",
     "test:admin": "node work/test-admin.mjs && node work/test-admin-browser.mjs && node work/test-voice-whale.mjs && node work/test-voice-isolation.mjs",
-    "test:brand-fillers": "node work/test-brand-fillers.mjs"
+    "test:brand-fillers": "node work/test-brand-fillers.mjs",
+    "test:rebounds": "node work/test-rebound-model.mjs && node work/test-rebound-service.mjs && node work/test-rebound-development.mjs && node work/test-rebound-api.mjs && node work/test-rebound-intent.mjs",
+    "test:rebound-browser": "node work/test-rebound-browser.mjs"
   },
   "dependencies": {
     "@metamask/connect-solana": "^2.1.1",

@@ -1,5 +1,5 @@
 /* Reusable, data-bound layouts attached to a stream, rather than a frozen snapshot. */
-const axoCardComponents=new Set(['ranked_list','metric_table','chain_overview','momentum_board','liquidity_map']);
+const axoCardComponents=new Set(['ranked_list','metric_table','chain_overview','momentum_board','liquidity_map','rebound_radar','bounce_board']);
 let axoAttachedCards=axoReadJson('axo-attached-cards-v1',[]);if(!Array.isArray(axoAttachedCards))axoAttachedCards=[];
 axoAttachedCards=axoAttachedCards.filter(r=>typeof r?.id==='string'&&typeof r.scope==='string'&&r.scope.length<4000&&typeof r.title==='string'&&r.title.length<=80&&Array.isArray(r.components)&&r.components.every(c=>axoCardComponents.has(c))&&Array.isArray(r.metrics)&&r.metrics.every(k=>Object.hasOwn(axoIntentMetrics,k))&&Array.isArray(r.chains)&&r.chains.every(c=>Object.hasOwn(axoChainNames,c))).slice(0,64);
 const axoAttachedJobs=new Map();

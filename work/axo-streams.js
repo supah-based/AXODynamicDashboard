@@ -1,5 +1,5 @@
 /* A dashboard is a live stream definition, never a saved list of result cards. */
-const axoStreamTypes=['portfolio','profile','paper','watchlist','home','chain','launchpads','launchpad','narrative','project','news','news-topic','axo','hatchery'];
+const axoStreamTypes=['portfolio','profile','paper','rebound','watchlist','home','chain','launchpads','launchpad','narrative','project','news','news-topic','axo','hatchery'];
 const axoStreamChains=['solana','base','bsc','robinhood','arc','ethereum'];
 const axoNarratives={momentum:'Activity momentum',new:'New pools',liquid:'Deep liquidity'};
 function axoNormalizeStream(value){
