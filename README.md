@@ -45,6 +45,8 @@ One prominent, dismissible AXO education card appears near the start of eligible
 
 Each variant has a cinematic 3:1 AXO-and-Pets header tailored to its subject: utility access, finding the exact token, or selecting a reward basket. The illustrations are brand metaphors; current values and verified destinations remain in the card body. Header space is reserved before images load, and the ratio stays the same on mobile. Artwork and generation prompts are versioned with the application.
 
+Decorative masonry fillers use a separate set of twenty cinematic action scenes: gem discoveries, cave expeditions, scam investigations and adventures across varied landscapes. They fill only existing gaps, disappear when the gap closes, and never move research cards. Visible gaps use distinct images, and versioned image URLs refresh replaced artwork in existing browsers. The original slot filenames remain stable; scene names and prompts live in `work/axo-brand-manifest.json`.
+
 The rewards variant refreshes once per minute while the page is visible, using the ecosystem adapter's exact-token official configuration, Based.bid observations and reward relay feeds. It shows the current selected basket separately from lifetime tracker distributions, retains exact per-asset token amounts, and dates observations. Fee values come from current verified configuration and explicitly identify the buy trade denominator; no fixed 5% or 3% assumption is made. These feeds do not establish holder-paid totals, so confirmed holder payments remain unverified. Stale or missing values are shown as unavailable, and no reward or price gain is promised.
 
 ## Project layout

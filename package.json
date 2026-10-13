@@ -17,7 +17,8 @@
     "test:paper": "node work/test-paper.mjs && node work/test-paper-browser.mjs",
     "test:watch-overview": "node work/test-watch-overview.mjs",
     "test:dislike": "node work/test-dislike.mjs",
-    "test:admin": "node work/test-admin.mjs && node work/test-admin-browser.mjs && node work/test-voice-whale.mjs && node work/test-voice-isolation.mjs"
+    "test:admin": "node work/test-admin.mjs && node work/test-admin-browser.mjs && node work/test-voice-whale.mjs && node work/test-voice-isolation.mjs",
+    "test:brand-fillers": "node work/test-brand-fillers.mjs"
   },
   "dependencies": {
     "@metamask/connect-solana": "^2.1.1",
