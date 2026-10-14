@@ -1,6 +1,6 @@
 {
   "name": "axo-local-research-dashboard",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.7",
@@ -37,7 +37,8 @@
     "test:strategies": "node work/test-trading-strategies.mjs && node work/test-trade-research.mjs && node work/test-venue-activity.mjs && node work/test-paper-retention.mjs && node work/test-axo-score.mjs && node work/test-paper.mjs",
     "test:strategies-browser": "node work/test-trading-browser.mjs",
     "test:pulse": "node work/test-intelligence-pulse.mjs && node work/test-trade-research.mjs && node work/test-public-ribbon.mjs && node work/test-project-links.mjs",
-    "test:pulse-browser": "node work/test-pulse-browser.mjs"
+    "test:pulse-browser": "node work/test-pulse-browser.mjs",
+    "test:decision-system": "node work/test-portfolio-risk.mjs && node work/test-paper-risk-controls.mjs && node work/test-knowledge-bridge.mjs && node work/test-research-queue.mjs && node work/test-history.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

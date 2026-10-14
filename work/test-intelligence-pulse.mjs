@@ -16,7 +16,7 @@ const security={local:p=>cache.get(p.address)||null,security:async p=>{reads++;c
 let pulse=createIntelligencePulse({security,getPools:()=>pools,storagePath,now:()=>now,autoStart:false});
 try{
  await Promise.all([pulse.tick(),pulse.tick()]);assert.equal(batches,1,'One shared scan even on simultaneous triggers');assert.equal(reads,2);assert.equal(pulse.snapshot().screening.screened,2);assert.equal(pulse.snapshot().events.filter(e=>e.type==='discovered').length,2);assert.doesNotMatch(JSON.stringify(pulse.snapshot()),/NEVER_PUBLIC|privateWallet|preferences/);
- await pulse.tick();assert.equal(reads,2,'Warm evidence reused');
+ await pulse.tick();assert.equal(reads,2,'Warm evidence reused');cache.set(address(1),{...clean(pools[0]),checks:[{key:'is_honeypot',value:'0'}]});assert.equal(pulse.snapshot().screening.pending,1,'Recent incomplete core fields remain pending');assert.equal(pulse.snapshot().screening.incomplete,1);cache.set(address(1),clean(pools[0]));
  // A material liquidity change appends once, without pretending a withdrawal was proven.
  now+=60001;pools=pools.map((p,i)=>({...p,seenAt:now,liquidity:i?100000:30000}));await pulse.tick();const liq=pulse.snapshot().events.filter(e=>e.type==='liquidity');assert.equal(liq.length,1);assert.match(liq[0].evidence.note,/not proof/);now+=20000;pools=pools.map(p=>({...p,seenAt:now}));await pulse.tick();assert.equal(pulse.snapshot().events.filter(e=>e.type==='liquidity').length,1);
  // Severe exact-token flags survive outages, incomplete clear responses, and restart.
