@@ -31,5 +31,7 @@ try{
  await page.waitForFunction(()=>axoHolderAccess?.authenticated===true&&axoHolderPending===false);
  assert.equal(await page.evaluate(()=>window.__signatures),1,'the explicit Reown connect action signs once after connection');
  assert.equal(await page.evaluate(()=>axoWallet?.reown),true);
- console.log('PASS single Reown connector and explicit connect-then-sign holder flow');
+ assert.equal(await page.locator('#walletButton').innerText(),'◈ Normal holder','the verified balance tier is applied to the connected wallet UI');
+ assert.match(await page.locator('#drawer').innerText(),/automatically applied from verified AXO holdings/);
+ console.log('PASS single Reown connector, explicit connect-then-sign, fresh AXO check and automatic tier display');
 }finally{await browser.close()}

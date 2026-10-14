@@ -29,7 +29,7 @@ try{
  await p.evaluate(address=>{axoWallet={kind:'evm',address,name:'Fixture wallet',reown:true,provider:{request:async({method,params})=>method==='eth_accounts'?[address]:method==='eth_chainId'?'0x2105':method==='personal_sign'?holderFixtureSign(params[0]):null}};axoWalletLabel();},wallet.address);
  await p.evaluate(()=>axoHolderPanel());assert.equal(await p.locator('[data-holder-connect-sign]').count(),1);assert.match(await p.locator('[data-holder-connect-sign]').innerText(),/Sign with Reown/);await p.locator('[data-holder-connect-sign]').click();
  await p.waitForFunction(()=>axoHolderAccess?.authenticated&&axoHolderPending===false);assert.equal(signatures,1);
- assert.match(await p.locator('#detail').innerText(),/Normal holder.*verified wallet/s);assert.match(await p.locator('#detail').innerText(),/20 backend AI requests\/day/);
+ assert.match(await p.locator('#detail').innerText(),/Normal holder.*automatically applied from verified AXO holdings/s);assert.equal(await p.locator('#walletButton').innerText(),'◈ Normal holder');assert.match(await p.locator('#detail').innerText(),/20 backend AI requests\/day/);
  assert.equal(await p.evaluate(()=>axoHolderRequire('voice')),true);
  assert.equal(await p.evaluate(()=>axoHolderRequire('customCards')),false);
  await p.evaluate(()=>axoAiPost('/api/ai/ask',{question:'Fixture'}));assert.equal(protectedCalls,1);await p.waitForFunction(()=>axoHolderAccess?.remaining.aiRequests===19);
