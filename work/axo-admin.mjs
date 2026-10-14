@@ -7,11 +7,11 @@ import {recoverMessageAddress} from 'viem';
 const DEFAULT_WALLET='0xD3B2eCfe77780bFfDFA356B70DC190C914511761';
 const ADDRESS=/^0x[a-fA-F0-9]{40}$/;
 const KEY=/^sk-(?:proj-)?[A-Za-z0-9_-]{16,500}$/;
-const defaults=Object.freeze({voiceEnabled:true,standardVoiceSessionSeconds:180,standardDailyStarts:10,radioEnabled:true});
+const defaults=Object.freeze({voiceEnabled:true,standardVoiceSessionSeconds:180,standardDailyStarts:10,radioEnabled:false});
 export function validateSettings(value){
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join(',')!==Object.keys(defaults).sort().join(','))throw Error('Only the four dashboard settings are accepted.');
  if(typeof value.voiceEnabled!=='boolean'||typeof value.radioEnabled!=='boolean'||!Number.isInteger(value.standardVoiceSessionSeconds)||value.standardVoiceSessionSeconds<30||value.standardVoiceSessionSeconds>600||!Number.isInteger(value.standardDailyStarts)||value.standardDailyStarts<1||value.standardDailyStarts>100)throw Error('Invalid dashboard settings types or ranges.');
- return {...value};
+ return {...value,radioEnabled:false};
 }
 export function createAdmin({directory='/var/lib/axo-streams',adminWallet=process.env.AXO_ADMIN_WALLET||DEFAULT_WALLET,publicOrigin=process.env.AXO_PUBLIC_ORIGIN||'',now=Date.now,verifyKey=async key=>{const r=await fetch('https://api.openai.com/v1/models/gpt-live-1',{headers:{Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});if(!r.ok)return false;const model=await r.json();return model?.id==='gpt-live-1'&&model?.object==='model'}}={}){
  if(!ADDRESS.test(adminWallet))throw Error('Invalid AXO_ADMIN_WALLET');

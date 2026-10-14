@@ -29,7 +29,7 @@ try{
  assert.throws(()=>validateSettings({...settings,arbitrary:'x'}));assert.throws(()=>validateSettings({...settings,standardDailyStarts:0}));
  assert.equal((await request('settings',{...settings,arbitrary:'x'})).status,400);
  assert.equal((await request('settings',settings)).status,200);
- assert.deepEqual(admin.settings(),settings);const radio=createRadioStation({getState:()=>({feeds:{}}),apiKey:()=>admin.effectiveKey(),getAdminSettings:()=>admin.settings(),autoStart:false});assert.equal(radio.status().access,'disabled');radio.stop();if(process.platform!=='win32')assert.equal((await stat(admin.paths.settingsFile)).mode&0o777,0o600);
+ assert.deepEqual(admin.settings(),settings);const radio=createRadioStation({getState:()=>({feeds:{}}),apiKey:()=>admin.effectiveKey(),getAdminSettings:()=>admin.settings(),autoStart:false});assert.equal(radio.status().access,'retired');radio.stop();if(process.platform!=='win32')assert.equal((await stat(admin.paths.settingsFile)).mode&0o777,0o600);
  assert.equal((await request('voice-key',{key:'invalid'})).status,400);
  const first='sk-'+ 'a'.repeat(32),second='sk-'+ 'b'.repeat(32);
  const voice=createAiApi({now:()=>clock,apiKey:()=>admin.effectiveKey(),getAdminSettings:()=>admin.settings(),localProvider:null,fetchImpl:async(_url,opts)=>{assert.equal(opts.headers.Authorization,'Bearer '+first);return {ok:true,status:201,json:async()=>({session:{id:'one'},transport:{type:'webrtc',sdp:'answer'}})}}});

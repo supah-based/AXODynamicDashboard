@@ -13,7 +13,6 @@
     "test:core": "node work/test-access.mjs && node work/test-chain-research.mjs && node work/test-news.mjs && node work/test-history.mjs && node work/test-based.mjs && node work/test-ai.mjs && node work/test-launchpads.mjs && node work/test-header-sources.mjs && node work/test-social.mjs && node work/test-credit-preview.mjs",
     "test:browser": "node work/test-chain-browser.mjs && node work/test-feedback-browser.mjs && node work/test-token-header.mjs && node work/test-launchpad-browser.mjs && node work/test-social-browser.mjs && node work/test-credits-browser.mjs && node work/test-watch-stream.mjs && node work/test-stream-memory-browser.mjs",
     "test:compact-feedback": "node work/test-compact-feedback.mjs",
-    "test:radio": "node work/test-radio.mjs && node work/test-radio-browser.mjs",
     "test:utility": "node work/test-holder-browser.mjs",
     "test:reown-wallet": "node work/test-reown-wallet.mjs && node work/test-wallet-lifecycle.mjs && node work/test-reown-holder-flow.mjs",
     "test:holders": "node work/test-holder-auth.mjs && node work/test-holder-voice.mjs && node work/test-tier-plans.mjs && node work/test-reward-education.mjs && node work/test-voice-isolation.mjs",
@@ -29,7 +28,9 @@
     "build:release": "node work/build-release.mjs",
     "test:personal-intelligence": "node work/test-stream-contract.mjs && node work/test-personal-intelligence.mjs && node work/test-release.mjs && node work/test-personal-ui.mjs && node work/test-community-api.mjs",
     "test:release-routes": "node work/test-intelligence-routes.mjs",
-    "test:voice-capacity": "node work/test-voice-unbounded.mjs && node work/test-voice-pill-browser.mjs"
+    "test:voice-capacity": "node work/test-voice-unbounded.mjs && node work/test-voice-pill-browser.mjs",
+    "test:radio-retired": "node work/test-radio-retired.mjs && node work/test-radio-retired-browser.mjs",
+    "test:ribbon": "node work/test-thin-ribbon-browser.mjs && node work/test-moving-ribbon-browser.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

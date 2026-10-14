@@ -126,7 +126,7 @@ Rewards additionally need `proof:"confirmed-reward-transfer"`, exact `asset:{cha
 
 ## Scheduling, cost and source coverage
 
-Keep the installed operator's actual `AXO_LUNA_CALLS_PER_HOUR` and `AXO_LUNA_CONCURRENCY`; this release does not silently raise them. The code default and a deployed operator override can differ. One existing Codex connection supplies reasoning; OpenAI API remains audio-only for Radio/explicit voice. Personal/shared voice keys and existing per-wallet budgets are preserved. No paid text fallback or new provider purchase is added.
+Keep the installed operator's actual `AXO_LUNA_CALLS_PER_HOUR` and `AXO_LUNA_CONCURRENCY`; this release does not silently raise them. The code default and a deployed operator override can differ. One existing Codex connection supplies reasoning; OpenAI API remains audio-only for explicit Ask Axo voice (Radio retired). Personal/shared voice keys and existing per-wallet budgets are preserved. No paid text fallback or new provider purchase is added.
 
 Evidence collection allows two concurrent projects and at most six starts/minute with a queue of 100, in addition to existing upstream throttling/caching. Followed projects receive two scheduling turns per candidate turn; a missing source does not become a pass. Community snapshots coalesce and cache for 30 seconds; signed contributions have a ten-second per-wallet spacing. Inbox collection is coalesced and limited to one pass per wallet per 15 seconds; the visible page polls once/minute. Outcomes journal at most once per five minutes; existing hourly bounded strategy samples and three-day research reviews remain. These are process schedules, not promises of delivery while the server is down.
 
