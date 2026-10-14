@@ -28,6 +28,14 @@ The main integration is `work/axo-intelligence-runtime.mjs`, created by `work/ax
 
 Existing `DurableStore`, source caching, public project identity, strategy review, SIWE sessions, holder budgets, risk screening, Bounce service, chain data, linked GitHub research and Codex queue are reused. Migrations 001 and 002 are unchanged. The personal store has its own strict field whitelist; it does not use the public-cache sanitizer for private records.
 
+## OpenClaw integration baseline
+
+The release incorporates all five OpenClaw commits through `5f65b0e` and has been reconciled with `BUILDER_HANDOFF.md`. Keep Reown as the sole displayed connector and the main wallet button as the combined wallet/access entry. Only a user-initiated connection continues to SIWE signing; passive restoration never signs. New signatures force a fresh exact Robinhood AXO check before applying tier/allowances. The private-workspace session reader adds ownership access without weakening those research/voice gates.
+
+The current Hatchery `intel.projects` bridge, current/accepting project presentation and qualified-review progress are retained. Streams consumes exact project handoffs and separately labeled peer evidence; it does not duplicate Hatchery wallet, Pet, XP, Crew voting or chain-resolution authority. The merged sign-in UI also dispatches the event that loads the matching private workspace. No migration-number collision occurred: the existing live baseline has 001/002; this release adds 003/004.
+
+Builder identifies the application supervisor as `axo-streams`; confirm the installed unit/path, then restart only that application for server authentication/service changes. Do not restart `axo-streams-codex` for this release. Preserve `/var/lib/axo-streams` and isolated Postgres state. Source UI routes remain no-store, while the startup build tooltip intentionally asks for a process restart if source/assets change after its stamp.
+
 ## Deployment sequence
 
 1. Identify the **existing** application unit, checkout, OS runtime user and private runtime directory. Keep its environment, reverse proxy, provider limits and queue settings. This document deliberately does not guess a VPS service name. Confirm that the unit runs Node 24+ and the checkout points to `supah-based/AXODynamicDashboard`.
