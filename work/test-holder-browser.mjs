@@ -27,7 +27,7 @@ try{
  await p.evaluate(()=>ask('Find a project'));assert.match(await p.locator('#detail').innerText(),/verify ownership/);assert.equal(protectedCalls,0);
  await p.evaluate(()=>axoStartLive());assert.equal(await p.evaluate(()=>holderMicCalls),0);
  await p.evaluate(address=>{axoWallet={kind:'evm',address,name:'Fixture wallet',reown:true,provider:{request:async({method,params})=>method==='eth_accounts'?[address]:method==='eth_chainId'?'0x2105':method==='personal_sign'?holderFixtureSign(params[0]):null}};axoWalletLabel();},wallet.address);
- await p.evaluate(()=>axoHolderPanel());assert.equal(await p.locator('[data-holder-connect-sign]').count(),1);assert.match(await p.locator('[data-holder-connect-sign]').innerText(),/Sign with Reown/);await p.locator('[data-holder-connect-sign]').click();
+ await p.evaluate(()=>axoHolderPanel());assert.equal(await p.locator('.holder-status').count(),0,'holder access must not expose a second connect control');assert.equal(await p.locator('[data-holder-connect-sign]').count(),1);assert.match(await p.locator('[data-holder-connect-sign]').innerText(),/Check AXO holdings/);await p.locator('[data-holder-connect-sign]').click();
  await p.waitForFunction(()=>axoHolderAccess?.authenticated&&axoHolderPending===false);assert.equal(signatures,1);
  assert.match(await p.locator('#detail').innerText(),/Normal holder.*automatically applied from verified AXO holdings/s);assert.equal(await p.locator('#walletButton').innerText(),'◈ Normal holder');assert.match(await p.locator('#detail').innerText(),/20 backend AI requests\/day/);
  assert.equal(await p.evaluate(()=>axoHolderRequire('voice')),true);

@@ -20,6 +20,7 @@ try{
  await page.addScriptTag({content:walletScript});
  await page.addScriptTag({content:holderScript});
  await page.waitForFunction(()=>typeof axoHolderConnectAndSign==='function'&&axoHolderAccess!==null);
+ assert.equal(await page.locator('.holder-status').count(),0,'holder access must not expose a second connect button');
  assert.equal(await page.evaluate(()=>window.__signatures),0,'page load must not request a signature');
  await page.evaluate(()=>axoWalletPanel());
  assert.equal(await page.locator('#axoReownConnect').count(),1);
@@ -33,5 +34,8 @@ try{
  assert.equal(await page.evaluate(()=>axoWallet?.reown),true);
  assert.equal(await page.locator('#walletButton').innerText(),'◈ Normal holder','the verified balance tier is applied to the connected wallet UI');
  assert.match(await page.locator('#drawer').innerText(),/automatically applied from verified AXO holdings/);
- console.log('PASS single Reown connector, explicit connect-then-sign, fresh AXO check and automatic tier display');
+ await page.locator('#walletButton').click();
+ await page.waitForFunction(()=>document.querySelector('#drawerTitle')?.textContent==='Wallet & AXO access');
+ assert.equal(await page.locator('#axoManageReown').count(),1);assert.equal(await page.locator('#axoDisconnect').count(),1);
+ console.log('PASS one wallet/access control, explicit connect-then-sign, fresh AXO check and automatic tier display');
 }finally{await browser.close()}
