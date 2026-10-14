@@ -33,6 +33,9 @@ try{
  const signed=await login();assert.equal(signed.data.tier.id,'holder');assert.equal(signed.data.features.voice,true);assert.match(signed.setCookie,/HttpOnly; SameSite=Strict/);
  const secure=await call('/api/auth/challenge',{origin:'https://streams.axo.vision',body:{address:wallet.address,chainId:4663}});assert.equal(secure.status,200);assert.match(secure.setCookie,/; Secure/);assert.match(secure.data.message,/streams.axo.vision wants you to sign in/);
  assert.equal((await call('/api/auth/verify',{cookie:signed.challenge.cookie,body:{message:signed.challenge.data.message,signature:signed.signature}})).status,401);
+ // A new signed connection must bypass any still-fresh cached holding and apply the current tier immediately.
+ amounts.set(other.address.toLowerCase(),0n);assert.equal(await auth.checkWalletFeature(other.address.toLowerCase(),'customCards'),false);
+ amounts.set(other.address.toLowerCase(),5000000n*10n**18n);const freshlyConnected=await login(other);assert.equal(freshlyConnected.data.tier.id,'top');assert.equal(freshlyConnected.data.features.customCards,true);
  assert.equal((await call('/api/research-card',{cookie:signed.cookie,body:{}})).status,403);
  assert.equal((await call('/api/ai/ask',{cookie:signed.cookie,origin:'https://unrelated.example',body:{}})).status,403);
  const results=await Promise.all(Array.from({length:22},()=>call('/api/ai/ask',{cookie:signed.cookie,body:{question:'Test fixture'}})));

@@ -55,7 +55,11 @@ export function createHolderAuth({readHoldings, now = Date.now, usagePath = null
     if (!value) throw fail('wallet_sign_in_required', 'Connect an EVM wallet and verify ownership to use Ask Axo.', 401);
     return {id, ...value};
   }
-  async function balance(address) {
+  async function balance(address, {fresh = false} = {}) {
+    if (fresh) {
+      balances.delete(address);
+      if (reads.has(address)) {try {await reads.get(address);} catch {} balances.delete(address);}
+    }
     const previous = balances.get(address);
     if (previous && now() - previous.checkedAt < BALANCE_MS) return previous;
     if (reads.has(address)) return reads.get(address);
@@ -66,8 +70,8 @@ export function createHolderAuth({readHoldings, now = Date.now, usagePath = null
       balances.set(address, result); if (balances.size > 2000) balances.delete(balances.keys().next().value); return result;
     })(); reads.set(address, pending); try {return await pending;} finally {reads.delete(address);}
   }
-  async function access(req, feature = null) {
-    const s = session(req), b = await balance(s.address), limits = HOLDER_LIMITS[b.tier.id];
+  async function access(req, feature = null, fresh = false) {
+    const s = session(req), b = await balance(s.address, {fresh}), limits = HOLDER_LIMITS[b.tier.id];
     if (!sessions.has(s.id)) throw fail('wallet_sign_in_required', 'Your wallet session ended. Sign in again.', 401);
     if (feature && b.tier.id === 'public') throw fail('axo_holding_required', 'Ask Axo requires at least 1,000,000 AXO in your verified wallet. Public browsing remains available.');
     if (['customCards','projectMonitoring'].includes(feature) && !limits[feature]) throw fail('axo_tier_required', 'This feature requires the Improved tier: at least 2,500,000 AXO.');
@@ -79,9 +83,9 @@ export function createHolderAuth({readHoldings, now = Date.now, usagePath = null
     if (!ledger[key] && Object.keys(ledger).length >= 2000) throw fail('usage_capacity','Access accounting is at capacity. Please retry later.',503);
     return ledger[key] ||= {aiRequests:0, voiceSeconds:0};
   }
-  async function view(req) {
+  async function view(req, fresh = false) {
     await load(); let a;
-    try {a = await access(req);} catch(e) {if (e.status === 401) return {authenticated:false, tier:ACCESS_TIERS[0], limits:HOLDER_LIMITS.public, features:{ask:false,voice:false,customCards:false,projectMonitoring:false}, reason:e.code}; throw e;}
+    try {a = await access(req, null, fresh);} catch(e) {if (e.status === 401) return {authenticated:false, tier:ACCESS_TIERS[0], limits:HOLDER_LIMITS.public, features:{ask:false,voice:false,customCards:false,projectMonitoring:false}, reason:e.code}; throw e;}
     const used = usage(a.s.address);
     return {authenticated:true, wallet:a.s.address, expiresAt:a.s.expiresAt, tier:a.b.tier, balance:a.b.amount, checkedAt:a.b.checkedAt, block:a.b.block, limits:a.limits, remaining:{aiRequests:Math.max(0,a.limits.aiRequests-used.aiRequests),voiceSeconds:a.limits.voiceSeconds===null?null:Math.max(0,a.limits.voiceSeconds-used.voiceSeconds)}, resetAt:Date.parse(day()+'T00:00:00Z')+86400000, features:{ask:a.b.tier.id!=='public',voice:a.b.tier.id!=='public',customCards:a.limits.customCards,projectMonitoring:a.limits.projectMonitoring}};
   }
@@ -107,7 +111,7 @@ export function createHolderAuth({readHoldings, now = Date.now, usagePath = null
       if (sessions.size>=1000) throw fail('auth_busy','Wallet sign-in is busy. Please retry.',503);
       // Rotate the challenge cookie into a separate, random authenticated session.
       const token=randomBytes(32).toString('hex');sessions.delete(id);sessions.set(token,{address:challenge.address,expiresAt:now()+SESSION_MS});
-      setCookie(req,res,token,SESSION_MS/1000);const request={...req,headers:{...req.headers,cookie:cookieName+'='+token}};send(res,200,await view(request));
+      setCookie(req,res,token,SESSION_MS/1000);const request={...req,headers:{...req.headers,cookie:cookieName+'='+token}};send(res,200,await view(request,true));
     } catch(e) {send(res,e.status||503,{error:e.status?e.message:'Wallet authentication is unavailable.',code:e.code||'auth_unavailable'});}
     return true;
   }

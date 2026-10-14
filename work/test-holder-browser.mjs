@@ -26,10 +26,10 @@ try{
  await p.evaluate(()=>{window.holderMicCalls=0;navigator.mediaDevices.getUserMedia=async()=>{holderMicCalls++;throw Error('No microphone needed for this test');};});
  await p.evaluate(()=>ask('Find a project'));assert.match(await p.locator('#detail').innerText(),/verify ownership/);assert.equal(protectedCalls,0);
  await p.evaluate(()=>axoStartLive());assert.equal(await p.evaluate(()=>holderMicCalls),0);
- await p.evaluate(address=>{axoWallet={kind:'evm',address,name:'Fixture wallet',provider:{request:async({method,params})=>method==='eth_accounts'?[address]:method==='eth_chainId'?'0x2105':method==='personal_sign'?holderFixtureSign(params[0]):null}};axoWalletLabel();},wallet.address);
- await p.evaluate(()=>axoHolderPanel());await p.locator('[data-holder-verify]').click();
+ await p.evaluate(address=>{axoWallet={kind:'evm',address,name:'Fixture wallet',reown:true,provider:{request:async({method,params})=>method==='eth_accounts'?[address]:method==='eth_chainId'?'0x2105':method==='personal_sign'?holderFixtureSign(params[0]):null}};axoWalletLabel();},wallet.address);
+ await p.evaluate(()=>axoHolderPanel());assert.equal(await p.locator('.holder-status').count(),0,'holder access must not expose a second connect control');assert.equal(await p.locator('[data-holder-connect-sign]').count(),1);assert.match(await p.locator('[data-holder-connect-sign]').innerText(),/Check AXO holdings/);await p.locator('[data-holder-connect-sign]').click();
  await p.waitForFunction(()=>axoHolderAccess?.authenticated&&axoHolderPending===false);assert.equal(signatures,1);
- assert.match(await p.locator('#detail').innerText(),/Normal holder.*verified wallet/s);assert.match(await p.locator('#detail').innerText(),/20 backend AI requests\/day/);
+ assert.match(await p.locator('#detail').innerText(),/Normal holder.*automatically applied from verified AXO holdings/s);assert.equal(await p.locator('#walletButton').innerText(),'◈ Normal holder');assert.match(await p.locator('#detail').innerText(),/20 backend AI requests\/day/);
  assert.equal(await p.evaluate(()=>axoHolderRequire('voice')),true);
  assert.equal(await p.evaluate(()=>axoHolderRequire('customCards')),false);
  await p.evaluate(()=>axoAiPost('/api/ai/ask',{question:'Fixture'}));assert.equal(protectedCalls,1);await p.waitForFunction(()=>axoHolderAccess?.remaining.aiRequests===19);
@@ -40,7 +40,7 @@ try{
  const cookies=await context.cookies();assert.ok(!cookies.some(c=>c.name==='axo-holder-session'),'Sign-out clears the authentication cookie');
  // Upgrading and signing again grants the higher tier without a wallet chain switch.
  units=2500000n*10n**18n;clockOffset+=61000;decline=true;
- await p.evaluate(address=>{axoWallet={kind:'evm',address,name:'Fixture wallet',provider:{request:async({method,params})=>method==='eth_accounts'?[address]:method==='eth_chainId'?'0x2105':method==='personal_sign'?holderFixtureSign(params[0]):null}};axoWalletLabel();},wallet.address);
+ await p.evaluate(address=>{axoWallet={kind:'evm',address,name:'Fixture wallet',reown:true,provider:{request:async({method,params})=>method==='eth_accounts'?[address]:method==='eth_chainId'?'0x2105':method==='personal_sign'?holderFixtureSign(params[0]):null}};axoWalletLabel();},wallet.address);
  await p.evaluate(()=>axoHolderSignIn());assert.equal(await p.evaluate(()=>Boolean(axoHolderAccess?.authenticated)),false);
  decline=false;await p.evaluate(()=>axoHolderSignIn());assert.equal(await p.evaluate(()=>axoHolderAccess.tier.id),'enhanced');assert.equal(await p.evaluate(()=>axoHolderRequire('customCards')),true);
  // Dynamic rewards preserve exact amounts and distinguish selection, allocation and payment.
