@@ -55,12 +55,12 @@ Use current UTC epoch milliseconds for `at`. Counterpart must validate authentic
 
 An active builder can run `node work/axo-coordinate-cli.mjs status`, `send <bounded-message.json>` or explicit `flush` with credentials in its server/CLI environment. OpenClaw may host a bounded background dispatcher after counterpart setup. This Codex chat is not always on; live notifications/wakeups require an explicitly supported integration and no automation is created here. Validate one harmless authenticated ping and result, duplicate/restart/outage/auth-denied cases and revocation/disablement. Current status is **not configured / not connected**. Unit acknowledgment fixtures are not a live link.
 
-## OpenClaw acknowledgment — fill in next integration commit
+## OpenClaw acknowledgment — production integration 2026-10-14
 
-- Installed app revision and migration versions:
-- Actual read-only knowledge transport/schema (no credentials):
-- Private provisioning and minimal scope confirmed:
-- Authenticated sample project read and source-date validation:
-- Coordination counterpart and authenticated ping/result outcome:
-- Revoke/disable/rollback checks:
-- Remaining production/provider acceptance gaps:
+- Installed app revision and migration versions: Builder release `ce123912dcc256c775e1268aa22dfd4714e3db8e` was fast-forwarded and deployed; the acceptance-fix integration commit is recorded by the live `/api/release` after the final restart. Isolated PostgreSQL migrations 001–006 are applied; migration 006 checksum prefix is `74203d08ec53` and `axo_project_progress` exists.
+- Actual read-only knowledge transport/schema (no credentials): Existing public exact-project `/api/project` and signed-holder `/api/project-evidence` routes are live. No dedicated Builder-authenticated shared-knowledge transport from the proposed schema has been provisioned, so that task remains not connected rather than inferred from the public routes.
+- Private provisioning and minimal scope confirmed: No coordination or shared-knowledge credential was added. `AXO_COORDINATION_ENDPOINT` and `AXO_COORDINATION_TOKEN` remain unset; the coordination seam is inert and exposes no public command endpoint.
+- Authenticated sample project read and source-date validation: Not performed because no dedicated authenticated Builder knowledge transport exists. Existing public project/evidence tests passed exact identity, source-date, stale/missing and private-field exclusion boundaries.
+- Coordination counterpart and authenticated ping/result outcome: Not configured / not connected. Unit fixtures passed bounded schema, destination restriction, durable outbox/restart and idempotent acknowledgment behavior; no live ping was claimed.
+- Revoke/disable/rollback checks: Absence of coordination configuration leaves dispatch disabled. Rollback is the prior app revision with an `axo-streams`-only restart; additive migration 006 and existing private/public data must be retained.
+- Remaining production/provider acceptance gaps: Real signed two-wallet/two-device workspace checks, a real microphone/model voice request, and the user's exact Robinhood project with real-wallet selected-chain balance, percent/Max, network rejection, automatic quote and explicit approval remain interactive acceptance gates. No trade was executed.
