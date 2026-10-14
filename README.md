@@ -2,6 +2,8 @@
 
 A local crypto research dashboard with configurable streams, project discovery, launchpad feeds, wallet portfolio views, and Ask Axo text and voice controls.
 
+Builder and agent integrations should start with [`BUILDER_HANDOFF.md`](BUILDER_HANDOFF.md), then fetch the current `main` branch before making changes.
+
 ## Run locally
 
 Requires Node.js 24 or newer and pnpm. Run commands from the repository root:
@@ -23,9 +25,9 @@ Credentials belong in the local `.env` file or the process environment. Neither 
 
 ## Holder access and tiers
 
-Public streams remain open. Ask Axo text, planning and voice require an explicit Sign-In with Ethereum message and at least 1,000,000 AXO. Connecting an address alone grants no AI access. Signing in authorizes no transaction or token approval. Ownership verification currently supports standard EVM wallet message signatures; Solana and contract-wallet sign-in are not implemented.
+Public streams remain open. The main wallet button is the single Reown entry for wallet connection and holder access. A user-initiated connection continues to an explicit Sign-In with Ethereum ownership message, then checks the exact AXO holding and automatically applies the matching tier. Connecting or restoring an address without the ownership signature grants no AI access. Signing in authorizes no transaction or token approval. Ownership verification currently supports standard EVM wallet message signatures; Solana and contract-wallet sign-in are not implemented.
 
-The server reads the exact AXO token balance on Robinhood, independently of the wallet's browsing network. It classifies exact integer token units, caches verified balances for up to one minute, and refuses missing, stale or mismatched evidence. Authentication uses an HttpOnly, SameSite cookie lasting two hours, with Secure cookies on the HTTPS origin. Sign-out and wallet changes clear browser access; active voice rechecks server access every minute and also checks after startup.
+The server reads the exact AXO token balance on Robinhood, independently of the wallet's browsing network. It classifies exact integer token units, caches routine verified balance reads for up to one minute, and refuses missing, stale or mismatched evidence. Every newly completed ownership signature bypasses that cache and forces a fresh holdings read before tier assignment. Authentication uses an HttpOnly, SameSite cookie lasting two hours, with Secure cookies on the HTTPS origin. Sign-out and wallet changes clear browser access; active voice rechecks server access every minute and also checks after startup.
 
 | Tier | Minimum AXO | Backend AI requests/day | Voice minutes/day | Additional available utilities |
 | --- | ---: | ---: | ---: | --- |
