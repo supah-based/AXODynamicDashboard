@@ -1,6 +1,6 @@
 # AXO 0.3.0 — release and integration tasks
 
-This additive release includes OpenClaw's `dd717d5` voice-capacity changes. Preserve Reown/SIWE, holder tiers, Hatchery, the full header, Credits/Profile/Portfolio, far-right wallet and fixed Ask Axo. Pull normally and restart **axo-streams**; UI changes do not require restarting the separate Codex broker. This handoff does not claim a VPS deployment or live wallet execution.
+This additive release includes OpenClaw's `dd717d5` voice-capacity isolation and `e08bed7` removal of voice/saved-stream capacity caps. Migration 005 belongs to OpenClaw; the project checklist uses migration 006 to avoid a version collision. Preserve Reown/SIWE, holder tiers, Hatchery, the full header, Credits/Profile/Portfolio, far-right wallet and fixed Ask Axo. Pull normally and restart **axo-streams**; UI changes do not require restarting the separate Codex broker. This handoff does not claim a VPS deployment or live wallet execution.
 
 ## Implemented changes
 
