@@ -378,7 +378,7 @@ document.addEventListener('click',e=>{if(!axoToolBar.contains(e.target))for(cons
 document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;for(const detail of axoToolBar.querySelectorAll('details'))if(detail.open){detail.open=false;detail.querySelector('summary').focus()}});
 layout();
 </script><script src="/private-storage.js"></script><script src="/release-ui.js"></script><script src="/ai.js"></script><script src="/stream-schema.js"></script>
-<script src="/streams.js"></script><script src="/alerts.js"></script><script src="/project-cards.js"></script><script src="/metric-math.js"></script><script src="/project-row.js"></script><script src="/news.js"></script><script src="/action-cards.js"></script><script src="/context.js"></script><script src="/pump.js"></script><script src="/ecosystem.js"></script>
+<script src="/streams.js"></script><script src="/alerts.js"></script><script src="/project-cards.js"></script><script>window.axoInstallResearchCard?.()</script><script src="/metric-math.js"></script><script src="/project-row.js"></script><script src="/news.js"></script><script src="/action-cards.js"></script><script src="/context.js"></script><script src="/pump.js"></script><script src="/ecosystem.js"></script>
 <script src="/chain-streams.js"></script>
 <script src="/project-profile.js"></script>
 <script src="/feedback.js"></script>
