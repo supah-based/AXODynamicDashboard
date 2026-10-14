@@ -1,3 +1,6 @@
+packages:
+  - '.'
+
 # No dependency lifecycle scripts are needed for the application build.
 allowBuilds:
   '@reown/appkit': false
