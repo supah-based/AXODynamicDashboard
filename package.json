@@ -14,7 +14,7 @@
     "test:compact-feedback": "node work/test-compact-feedback.mjs",
     "test:radio": "node work/test-radio.mjs && node work/test-radio-browser.mjs",
     "test:utility": "node work/test-holder-browser.mjs",
-    "test:reown-wallet": "node work/test-reown-wallet.mjs && node work/test-wallet-lifecycle.mjs",
+    "test:reown-wallet": "node work/test-reown-wallet.mjs && node work/test-wallet-lifecycle.mjs && node work/test-reown-holder-flow.mjs",
     "test:holders": "node work/test-holder-auth.mjs && node work/test-holder-voice.mjs && node work/test-tier-plans.mjs && node work/test-reward-education.mjs && node work/test-voice-isolation.mjs",
     "test:paper": "node work/test-paper.mjs && node work/test-paper-browser.mjs",
     "test:watch-overview": "node work/test-watch-overview.mjs",
