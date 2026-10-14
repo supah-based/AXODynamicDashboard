@@ -2,7 +2,7 @@ import AxoStablecoins from './axo-stablecoins.cjs';
 import {publicSources} from './axo-source-cache.mjs';import {normalizePair} from './axo-project-model.mjs';
 const DAY=86400000,platforms={ethereum:'ethereum',base:'base',bsc:'binance-smart-chain',solana:'solana'},valid=(c,a)=>typeof a==='string'&&(c==='solana'?/^[1-9A-HJ-NP-Za-km-z]{32,44}$/:/^0x[a-fA-F0-9]{40}$/).test(a),eq=(c,a,b)=>typeof a==='string'&&typeof b==='string'&&(c==='solana'?a===b:a.toLowerCase()===b.toLowerCase());
 export function screenProjects(pools,kind,{now=Date.now(),chain=null,minLiquidity=1000}={}){
- const unique=new Map();for(const p of pools){if(AxoStablecoins.isStablecoin(p)||!valid(p.chain,p.address)||chain&&p.chain!==chain||p.curve||p.observationStatus==='stale'||!Number.isFinite(p.seenAt)||p.seenAt>now||now-p.seenAt>900000||!(p.liquidity>=minLiquidity))continue;const tokenAt=p.tokenCreatedAt&&p.tokenAgeSource?p.tokenCreatedAt:null,poolAt=p.createdAt>0&&p.createdAt<=now?p.createdAt:null,ageAt=tokenAt||poolAt;let why;
+ const unique=new Map();for(const p of pools){if(!AxoStablecoins.isSuggestedProject(p)||!valid(p.chain,p.address)||chain&&p.chain!==chain||p.curve||p.observationStatus==='stale'||!Number.isFinite(p.seenAt)||p.seenAt>now||now-p.seenAt>900000||!(p.liquidity>=minLiquidity))continue;const tokenAt=p.tokenCreatedAt&&p.tokenAgeSource?p.tokenCreatedAt:null,poolAt=p.createdAt>0&&p.createdAt<=now?p.createdAt:null,ageAt=tokenAt||poolAt;let why;
  if(kind==='swing'){if(!tokenAt||tokenAt>now||now-tokenAt<=7*DAY)continue;why='Source-reported project/token genesis >7 days · '+p.tokenAgeSource;}
  else if(kind==='bluechip'){const c=p.credibleListing;if(!c||!eq(p.chain,c.address,p.address)||c.chain!==p.chain||!c.coinId||!(c.rank>0&&c.rank<=100)||!(c.marketCap>=1e9)||!c.at||c.at>now||now-c.at>900000)continue;why='CoinGecko #'+c.rank+' · reported circulating cap ≥$1B · exact platform contract';}
  else if(kind==='degen'){why=poolAt&&now-poolAt<=7*DAY?'Pool ≤7 days old · speculative screen; token launch unknown':'Newly sampled project · speculative screen; token launch age not inferred';}
@@ -19,4 +19,3 @@ export function createProjectScreens({chains,getState=()=>null,source=publicSour
  }
  async function handle(req,res,u){if(u.pathname!=='/api/project-screens')return false;let d,status=200;try{if(req.method!=='GET')throw Error('GET required');d=await snapshot(Object.fromEntries(u.searchParams))}catch(e){status=502;d={error:e.message}}res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(d));return true}return {handle,snapshot};
 }
-

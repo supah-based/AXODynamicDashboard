@@ -1,5 +1,5 @@
-/* Suppress suggested fiat-pegged base assets. Quotes, explicit projects and personal holdings remain inspectable. */
-const axoSuggestedProject=p=>!AxoStablecoins.isStablecoin(p);
+/* Suppress suggested canonical stable, native and wrapped-native base assets. Quotes, explicit projects and personal holdings remain inspectable. */
+const axoSuggestedProject=p=>AxoStablecoins.isSuggestedProject(p);
 const stableNumericBase=discoveryNumeric;discoveryNumeric=function(p,d){return axoSuggestedProject(p)&&stableNumericBase(p,d)};
 const stableCandidatesBase=candidates;candidates=function(...args){return stableCandidatesBase(...args).filter(axoSuggestedProject)};
 const stableChainBase=chProjectRows;chProjectRows=function(...args){const rows=stableChainBase(...args);return axoStream.type==='chain'&&chView()==='followed'?rows:rows.filter(axoSuggestedProject)};

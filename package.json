@@ -30,7 +30,10 @@
     "test:release-routes": "node work/test-intelligence-routes.mjs",
     "test:voice-capacity": "node work/test-voice-unbounded.mjs && node work/test-voice-pill-browser.mjs",
     "test:radio-retired": "node work/test-radio-retired.mjs && node work/test-radio-retired-browser.mjs",
-    "test:ribbon": "node work/test-thin-ribbon-browser.mjs && node work/test-moving-ribbon-browser.mjs"
+    "test:ribbon": "node work/test-thin-ribbon-browser.mjs && node work/test-moving-ribbon-browser.mjs",
+    "test:reading-layout": "node work/test-reading-layout-browser.mjs",
+    "test:public-ribbon": "node work/test-public-ribbon.mjs && node work/test-global-ribbon-browser.mjs",
+    "test:suggested-assets": "node work/test-suggested-assets.mjs && node work/test-intelligence-core.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

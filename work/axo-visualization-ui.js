@@ -1,6 +1,6 @@
 /* Native charts of the existing filtered public sample. No chart-specific requests. */
 let axoVizMode='h24',axoVizSerial=0;const axoActivityWindows=new Map();
-function axoVizRows(){const rows=axoStream.type==='discovery'?discoveryPicks():axoStream.type==='watchlist'?axoWatch:lpScope()?lpRows(lpTab()):axoChainScope()?chProjectRows():axoStream.type==='home'?candidates():[],unique=new Map();for(const input of rows){const m=axoRowModel(input),p=m.p;if(!m.fresh||!AxoVisualModel.identity(p)||!axoRiskProtected(p)&&!axoRiskAllowed(p))continue;const k=axoContractKey(p),old=unique.get(k);if(!old||(p.liquidity??-1)>(old.liquidity??-1))unique.set(k,p);}return [...unique.values()];}
+function axoVizRows(){const rows=axoStream.type==='discovery'?discoveryPicks():axoStream.type==='watchlist'?axoWatch:lpScope()?lpRows(lpTab()):axoChainScope()?chProjectRows():axoStream.type==='home'?candidates():[],unique=new Map();for(const input of rows){const m=axoRowModel(input),p=m.p;if(!AxoStablecoins.isSuggestedProject(p)||!m.fresh||!AxoVisualModel.identity(p)||!axoRiskProtected(p)&&!axoRiskAllowed(p))continue;const k=axoContractKey(p),old=unique.get(k);if(!old||(p.liquidity??-1)>(old.liquidity??-1))unique.set(k,p);}return [...unique.values()];}
 function axoTreemap(...args){return AxoVisualModel.treemap(...args);}
 function axoVizOpen(p){axoProjectMap.set('project-'+p.id,p);return ' data-project-dashboard="'+esc(p.id)+'"';}
 function axoVizDirection(p){const v=p.changes?.h24??p.change24;return Number.isFinite(v)?v<0?'down':v>0?'up':'flat':'unknown';}

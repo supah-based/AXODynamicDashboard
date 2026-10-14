@@ -37,10 +37,10 @@ export function holderObservation(history,p,now){
  return baseline?{from:baseline.at,to:current.at,before:baseline.count,after:current.count,delta:current.count-baseline.count,percent:baseline.count>0?(current.count/baseline.count-1)*100:null,windowHours:(current.at-baseline.at)/HOUR,source:current.source}:null;
 }
 export function launchpadScreens(projects,{now=Date.now(),minLiquidity=1000,lens='all'}={}){
- const unique=new Map();for(const p of projects){if(AxoStablecoins.isStablecoin(p)||now-p.seenAt>900000||p.seenAt>now||p.observationStatus==='stale')continue;const old=unique.get(p.tokenKey);if(!old||old.curve&&!p.curve||old.curve===p.curve&&(p.liquidity??p.reserve??-1)>(old.liquidity??old.reserve??-1))unique.set(p.tokenKey,p)}
+ const unique=new Map();for(const p of projects){if(!AxoStablecoins.isSuggestedProject(p)||now-p.seenAt>900000||p.seenAt>now||p.observationStatus==='stale')continue;const old=unique.get(p.tokenKey);if(!old||old.curve&&!p.curve||old.curve===p.curve&&(p.liquidity??p.reserve??-1)>(old.liquidity??old.reserve??-1))unique.set(p.tokenKey,p)}
  let rows=[...unique.values()];if(lens==='trenches')rows=rows.filter(p=>(p.launchAt||p.createdAt)&&now-(p.launchAt||p.createdAt)<=7*DAY);if(lens==='swing')rows=rows.filter(p=>!p.curve&&p.createdAt&&now-p.createdAt>=7*DAY);if(lens==='bluechip')rows=[];
  const dex=rows.filter(p=>!p.curve&&p.liquidity>=minLiquidity),rank=dex.filter(p=>p.liquidity>=Math.max(10000,minLiquidity));
- const reported=lens==='bluechip'?[]:projects.filter(p=>!AxoStablecoins.isStablecoin(p)&&p.seenAt<=now&&now-p.seenAt<DAY&&(p.observationStatus==='stale'||now-p.seenAt>900000)&&(p.curve||p.liquidity>=minLiquidity)&&(lens!=='trenches'||(p.launchAt||p.createdAt)&&now-(p.launchAt||p.createdAt)<=7*DAY)&&(lens!=='swing'||!p.curve&&p.createdAt&&now-p.createdAt>=7*DAY));
+ const reported=lens==='bluechip'?[]:projects.filter(p=>AxoStablecoins.isSuggestedProject(p)&&p.seenAt<=now&&now-p.seenAt<DAY&&(p.observationStatus==='stale'||now-p.seenAt>900000)&&(p.curve||p.liquidity>=minLiquidity)&&(lens!=='trenches'||(p.launchAt||p.createdAt)&&now-(p.launchAt||p.createdAt)<=7*DAY)&&(lens!=='swing'||!p.curve&&p.createdAt&&now-p.createdAt>=7*DAY));
  return {reported,launches:rows.filter(p=>p.launchAt&&now-p.launchAt<=7*DAY).sort((a,b)=>b.launchAt-a.launchAt),graduating:rows.filter(p=>p.curve&&(p.graduationStage==='graduating'||p.graduation>=80)).sort((a,b)=>(b.graduation??-1)-(a.graduation??-1)),graduated:rows.filter(p=>p.graduated||p.migrated).sort((a,b)=>(b.graduatedAt||b.seenAt)-(a.graduatedAt||a.seenAt)),provider:rows.filter(p=>p.providerTrending).sort((a,b)=>(b.volume24??-1)-(a.volume24??-1)),fresh:dex.filter(p=>p.createdAt&&now-p.createdAt<=7*DAY).sort((a,b)=>b.createdAt-a.createdAt),curves:rows.filter(p=>p.curve&&p.createdAt&&now-p.createdAt<=7*DAY).sort((a,b)=>b.createdAt-a.createdAt),momentum:rank.filter(p=>p.volumePace>=1.5&&p.buys>=10&&p.sells>=5&&p.buyers>=10).sort((a,b)=>b.volumePace-a.volumePace||b.volume1-a.volume1),winners:dex.filter(p=>p.liquidity>=Math.max(50000,minLiquidity)&&p.volume24>=10000&&p.createdAt&&now-p.createdAt>=DAY&&p.change24>0).sort((a,b)=>b.change24-a.change24),sustained:dex.filter(p=>p.createdAt&&now-p.createdAt>=7*DAY&&p.liquidity>=Math.max(50000,minLiquidity)&&p.volume24>=25000&&p.volume1>=1000).sort((a,b)=>b.volume24-a.volume24),holders:dex.filter(p=>p.holderGrowth?.delta>0).sort((a,b)=>b.holderGrowth.delta-a.holderGrowth.delta),activity:dex.sort((a,b)=>(b.volume24??-1)-(a.volume24??-1))};
 }
 export function createLaunchpadApi({chains,getEcosystem,cachePath,direct=null,gecko=geckoPublic,now=Date.now}={}){
@@ -78,8 +78,3 @@ export function createLaunchpadApi({chains,getEcosystem,cachePath,direct=null,ge
  async function handle(req,res,u){if(u.pathname!=='/api/launchpads')return false;let code=200,d;try{if(req.method!=='GET')throw new Error('GET required');d=await snapshot({chain:u.searchParams.get('chain')||null,platform:u.searchParams.get('platform')||null,minLiquidity:Math.max(1000,Math.min(1000000,Number(u.searchParams.get('liquidity'))||1000)),lens:u.searchParams.get('lens')||'all'})}catch(e){code=400;d={error:e.message}}res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(d));return true}
  return {snapshot,local,context,exact,handle,collect};
 }
-
-
-
-
-
