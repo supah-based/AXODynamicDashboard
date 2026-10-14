@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {createLunaQueue} from './axo-luna-queue.mjs';
+import {createAiApi,AI_MODEL} from './axo-ai-api.mjs';
+import {createIntentApi} from './axo-intent-api.mjs';
+const tick=()=>new Promise(r=>setTimeout(r,10));
+let release;
+const queue=createLunaQueue({hourlyLimit:null,maxQueued:null,concurrency:1,startSpacingMs:0,autoStart:false});
+const jobs=[queue.run('question','voice-0',()=>new Promise(r=>release=r),{maxWaitMs:null})];
+for(let i=1;i<65;i++)jobs.push(queue.run('question','voice-'+i,async()=>i,{maxWaitMs:null}));
+await tick();let status=await queue.status();assert.equal(status.unmetered,true);assert.equal(status.hourlyLimit,null);assert.equal(status.remaining,null);assert.equal(status.active,1);assert.equal(status.queued.length,64,'voice queue accepts more than the former forty-job cap');release(0);assert.equal((await Promise.all(jobs)).length,65);status=await queue.status();assert.equal(status.callsLastHour,65);queue.stop();
+let aiCalls=0;const ai=createAiApi({getState:()=>({feeds:{}}),localProvider:{status:async()=>({available:true,voiceQueue:{unmetered:true,remaining:null}}),answer:async()=>({model:AI_MODEL,value:{answer:'voice response '+(++aiCalls),cards:[],sources:[]}})}});const answers=await Promise.all(Array.from({length:13},(_,i)=>ai.answer('voice '+i,[],null,null,null,null,{},null,null,'owner')));assert.equal(answers.length,13);assert.equal(aiCalls,13,'delegated voice answers bypass text busy/rate caps');
+const value={scoreMin:null,scoreMax:null,rankBy:'activity',targetStream:null,change:null,operation:'answer',chains:[],query:null,ticker:null,title:'Voice answer',clarification:null,liquidityMin:null,volumeMin:null,components:[],metrics:[]};let intentCalls=0;const intent=createIntentApi({model:async()=>({model:AI_MODEL,value,usage:{}}),search:async()=>[]});const plans=await Promise.all(Array.from({length:13},(_,i)=>intent.plan('voice intent '+i,{},null,null,null,null,null,null,null,true).then(x=>(intentCalls++,x))));assert.equal(plans.length,13);assert.equal(intentCalls,13,'voice intent planning bypasses the text planner capacity gate');
+const live=await fs.readFile('work/axo-live-actions.js','utf8');assert(!live.includes('s.seen.size>24'),'voice delegation count has no arbitrary session cap');
+const management=await fs.readFile('work/axo-management-ui.js','utf8');assert.match(management,/signature!==axoLiveTaskSignature/);assert.match(management,/will-change:transform/);assert.match(management,/conic-gradient/);
+console.log('PASS unmetered serial voice queue, no application voice call/delegation cap, voice planner execution and stable smooth activity-pill animation.');

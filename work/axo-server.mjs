@@ -88,9 +88,9 @@ const chainApi=createChainApi({cachePath:path.join(runtimeRoot,'axo-chain-snapsh
 const launchpadApi=createLaunchpadApi({direct:createDirectLaunchpadFeeds({bitqueryToken:process.env.AXO_BITQUERY_ACCESS_TOKEN||null}),chains:chainApi,getEcosystem:()=>ecosystemApi.snapshot(),cachePath:path.join(runtimeRoot,'axo-launchpad-history.json')});
 const projectScreens=createProjectScreens({chains:chainApi,getState:()=>state});
 const lunaQueue=createLunaQueue({path:path.join(runtimeRoot,'axo-luna-budget.json'),legacyPath:path.join(runtimeRoot,'axo-discovery-state.json')});
-const voiceLunaQueue=createLunaQueue({path:path.join(runtimeRoot,'axo-voice-luna-budget.json'),hourlyLimit:Number(process.env.AXO_VOICE_LUNA_CALLS_PER_HOUR||60),concurrency:1});
+const voiceLunaQueue=createLunaQueue({path:path.join(runtimeRoot,'axo-voice-luna-budget.json'),hourlyLimit:null,maxQueued:null,concurrency:1});
 const lunaRun=(kind,key,args,web=false)=>lunaQueue.run(kind,kind+':'+jobKey(key),()=>codexAnswer(args,web),{signal:args.signal,maxWaitMs:kind==='question'?60000:180000,eligible:()=>kind==='question'||discovery.status().active});
-const voiceLunaRun=(key,args)=>voiceLunaQueue.run('question','voice:'+jobKey(key),()=>codexAnswer(args,false),{signal:args.signal,maxWaitMs:15000});
+const voiceLunaRun=(key,args)=>voiceLunaQueue.run('question','voice:'+jobKey(key),()=>codexAnswer(args,false),{signal:args.signal,maxWaitMs:null});
 const simulationApi=createSimulationApi();
 const changeLedger=createChangeLedger({cachePath:path.join(runtimeRoot,'axo-change-observations.json')});await changeLedger.load();
 const intelligenceChanges=async()=>{await changeLedger.observe(state,chains.map(c=>chainApi.local(c.id)));return changeLedger.context()};

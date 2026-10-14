@@ -58,7 +58,7 @@ export function createAiApi({getPersonalIntelligence,getPersonalMemory,getIntell
  function rateLimit(owner='local-default'){for(const [id,list]of calls)if(!list.length||list.at(-1)<now()-60000)calls.delete(id);let list=calls.get(owner)||[];list=list.filter(at=>at>=now()-60000);if(list.length>=12)throw new AiError('local_rate_limit','Please wait a minute before asking more questions.',429);list.push(now());calls.set(owner,list)}
  async function answer(question,history,stream,researchKey,creditSession=null,memory=null,voiceContext=null,dashboard=null,uxFeedback=null,owner='local-default',personalIntel=null){
   if(typeof question!=='string'||!question.trim()||question.length>MAX_QUESTION)throw new AiError('invalid_question','Enter a question of 1–2000 characters.',400);
-  if(!localProvider)key();if(busy.has(owner))throw new AiError('busy','Axo is already answering your previous question. Please wait.',429);if(busy.size>=4)throw new AiError('busy','Axo is handling other requests. Please retry shortly.',429);rateLimit(owner);busy.add(owner);
+  const delegatedVoice=Boolean(voiceContext);if(!localProvider)key();if(!delegatedVoice){if(busy.has(owner))throw new AiError('busy','Axo is already answering your previous question. Please wait.',429);if(busy.size>=4)throw new AiError('busy','Axo is handling other requests. Please retry shortly.',429);rateLimit(owner);busy.add(owner);}
   const context=marketContext(getState(),now());context.researchStrategy=RESEARCH_STRATEGY;context.uxPreferences=uxContext(uxFeedback);if(personalIntel)context.privateIntelligence=personalIntel;
   try{
    const personal=memory?.source==='verified-wallet-workspace'&&getPersonalMemory?memory:await personalMemoryContext(memory,{now:now()});if(personal)context.personalMemory=personal;
@@ -106,7 +106,7 @@ export function createAiApi({getPersonalIntelligence,getPersonalMemory,getIntell
    let parsed;try{parsed=JSON.parse(content.filter(x=>x.type==='output_text').map(x=>x.text).join(''))}catch{throw new AiError('invalid_answer','Axo returned an unreadable answer. Please try again.')}
    const result=validateAnswer(parsed,context);lastSuccess={at:now(),model:response.model};lastFailure=null;
    const actions=makeResearchActions(result.cards,question,context.activeStream||{},getState());return {...result,cards:[...new Set(actions.map(a=>a.kind))],actions,model:response.model,provider:localProvider?'codex-local':'openai-api',asOf:context.asOf};
-  }catch(e){lastFailure=e.code||'provider_error';throw e}finally{busy.delete(owner)}
+  }catch(e){lastFailure=e.code||'provider_error';throw e}finally{if(!delegatedVoice)busy.delete(owner)}
  }
  async function endVoice(id,owner='local-default'){const item=voices.get(id);if(!item||item.owner!==owner)return false;if(item.ending)return item.ending;cancel(item.timer);cancel(item.accessTimer);item.ending=(async()=>{try{await provider('live/sessions/'+encodeURIComponent(id)+'/hangup',undefined,10000,item.credential);voices.delete(id);if(item.holder)await item.holder.refund(Math.max(0,Math.floor((item.expiresAt-now())/1000))).catch(()=>{});voiceResult(owner,{failure:null});return true}catch(e){voiceResult(owner,{failure:{code:e.code||'voice_cleanup_failed',at:now(),phase:'ending'}});item.timer=schedule(()=>endVoice(id,owner).catch(()=>{}),10000);item.timer?.unref?.();throw e}finally{item.ending=null}})();return item.ending}
  async function startVoice(sdp,owner='local-default',holder=null){
