@@ -1,3 +1,5 @@
+> Current release: [AXO 0.3.0 implementation and operator tasks](OPENCLAW_RELEASE_0.3.0.md), including migration 006 and the shared knowledge/coordination setup. The 0.2.0 guidance below remains the baseline.
+
 # AXO 0.2.0 — personal intelligence deployment
 
 This release extends the existing AXO Streams application and isolated `axo_streams` database. It does not create a replacement database, deploy the VPS, provision accounts, or execute trades. The local preview is `http://127.0.0.1:43187/?view=compact-intel`; production is `https://streams.axo.vision` after OpenClaw installs and verifies this release.

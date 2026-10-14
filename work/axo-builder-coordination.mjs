@@ -1,0 +1,25 @@
+/* Optional server/CLI transport seam. No gateway method or live connection is assumed. */
+import fs from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {safePayload} from './axo-durable-store.mjs';
+import {responseJson} from './axo-http-json.mjs';
+import Stream from './axo-stream-schema.cjs';
+export function coordinationMessage(input,now=Date.now()){
+ if(!input||!['status-question','update','result','ping'].includes(input.kind)||typeof input.text!=='string'||!input.text.trim()||input.text.length>1500||!/^[-a-zA-Z0-9_]{1,80}$/.test(input.correlationId||''))throw Error('Bounded typed coordination message required.');
+ const message={version:1,id:input.id||randomUUID(),correlationId:input.correlationId,sender:'axo-builder',destination:'openclaw',at:now,kind:input.kind,text:input.text,context:input.context||{}};if(!/^[a-zA-Z0-9-]{1,64}$/.test(message.id)||Buffer.byteLength(JSON.stringify(message))>4096)throw Error('Coordination payload too large or invalid.');safePayload(message);if(/0x[a-f0-9]{40}|(?:\bBearer\s|\bsk-|\bghp_|private key)|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(message.text))throw Error('Use public project references in validated context, never credentials or account details in coordination text.');if(Object.keys(message.context).some(k=>!['commit','schemaVersion','publicProject','capability','status'].includes(k)))throw Error('Unsupported coordination context.');if(message.context.publicProject){if(Object.keys(message.context.publicProject).some(k=>!['chain','address','pool'].includes(k)))throw Error('Only an exact public project reference is allowed.');message.context.publicProject=Stream.exact(message.context.publicProject);}for(const k of ['commit','capability','status'])if(message.context[k]!==undefined&&(typeof message.context[k]!=='string'||message.context[k].length>100))throw Error('Bounded public coordination metadata required.');return message;
+}
+export function createCoordination({file,transport=null,now=Date.now}={}){
+ if(file instanceof URL)file=fileURLToPath(file);
+ let loaded=false,outbox=[],audit=[],next=0,pending=false;const seen=new Set();
+ async function load(){if(loaded)return;loaded=true;if(!file)return;try{const d=JSON.parse(await fs.readFile(file,'utf8'));outbox=(d.outbox||[]).slice(0,20).map(m=>coordinationMessage(m,m.at));audit=(d.audit||[]).slice(-50);for(const r of audit)seen.add(r.id);}catch(e){if(e.code!=='ENOENT')throw Error('Coordination journal unavailable; delivery stopped.');}}
+ async function save(){if(!file)return;await fs.writeFile(file+'.tmp',JSON.stringify({version:1,outbox,audit:audit.slice(-50)}),{mode:0o600});await fs.rename(file+'.tmp',file);}
+ async function enqueue(input){await load();const message=coordinationMessage(input,now());if(seen.has(message.id)||outbox.some(m=>m.id===message.id))return {queued:false,duplicate:true,id:message.id};if(outbox.length>=20)throw Error('Coordination outbox full.');outbox.push(message);await save();return {queued:true,id:message.id};}
+ async function flush(){await load();if(!transport||pending||now()<next)return {delivered:0,status:transport?'backoff':'not-connected'};pending=true;let delivered=0;try{const message=outbox[0];if(!message)return {delivered:0,status:'idle'};const r=await transport(message);if(r?.version!==1||r.id!==message.id||r.sender!=='openclaw'||r.status!=='accepted'||!Number.isFinite(r.at)||Math.abs(now()-r.at)>300000)throw Error('Authenticated counterpart acknowledgment did not match.');seen.add(message.id);outbox.shift();audit.push({id:message.id,correlationId:message.correlationId,at:now(),kind:message.kind,status:'acknowledged'});while(seen.size>100)seen.delete(seen.values().next().value);await save();delivered++;next=now()+5000;return {delivered,status:'acknowledged'};}catch{next=now()+60000;return {delivered:0,status:'delivery-unverified'};}finally{pending=false;}}
+ const status=()=>({version:1,configured:Boolean(transport),connected:false,authenticatedDeliveryVerified:audit.length>0,queued:outbox.length,acknowledged:audit.length,nextEligibleAt:next,mode:'Explicit active-process delivery; no always-on Codex chat, remote wakeup, shell, SQL or arbitrary tools.'});
+ return {load,enqueue,flush,status};
+}
+export function coordinationTransport({endpoint=process.env.AXO_COORDINATION_ENDPOINT,token=process.env.AXO_COORDINATION_TOKEN,fetchImpl=fetch}={}){
+ if(!endpoint||!token)return null;const u=new URL(endpoint);if(u.protocol!=='https:'||u.hostname!=='claw.supah.ai'||u.port||u.username||u.password||u.search||u.hash||token.length<16)throw Error('Private counterpart endpoint and scoped credential required.');
+ return async message=>{const r=await fetchImpl(u.href,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify({protocol:'axo-coordination-v1',message}),redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Coordination counterpart unavailable.');return responseJson(r,'Coordination counterpart');};
+}

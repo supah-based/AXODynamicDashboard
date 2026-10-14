@@ -29,6 +29,7 @@ Thumbs.db
 !/work/build-solana-sdk.mjs
 !/work/test-*.mjs
 !/work/axo-chain-palette.json
+!/work/axo-public-wallet-cohort.json
 !/work/axo-brand-manifest.json
 !/work/axo-stablecoin-directory.json
 !/work/axo-solana-sdk.bundle.js.LEGAL.txt

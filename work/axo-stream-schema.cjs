@@ -1,7 +1,7 @@
 /* One data-only contract for saved streams, client migration and server validation. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.AxoStreamSchema=api;})(globalThis,function(){
  const version=2,types=['home','chain','project','discovery','rebound','watchlist','launchpads','launchpad','narrative','news','news-topic','axo','hatchery','profile','portfolio','paper','risk','changes','research-review','inbox','quality'];
- const chains=['solana','base','bsc','robinhood','arc','ethereum'],components=['ranked_list','metric_table','chain_overview','momentum_board','liquidity_map','rebound_radar','bounce_board','evidence_dossier','signal_inbox','narrative_map','portfolio_accounting'];
+ const chains=['solana','base','bsc','robinhood','arc','ethereum'],components=['ranked_list','metric_table','chain_overview','momentum_board','liquidity_map','project_activity','project_progress','large_wallets','rebound_radar','bounce_board','evidence_dossier','signal_inbox','narrative_map','portfolio_accounting'];
  const metrics=['price','marketCap','liquidity','volume24','change24','holders','axoScore'];
  const plain=(v,n)=>typeof v==='string'?v.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,n):null;
  const finite=v=>typeof v==='number'&&Number.isFinite(v),clamp=(v,a,b,d)=>finite(Number(v))?Math.max(a,Math.min(b,Number(v))):d;
