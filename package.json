@@ -33,7 +33,9 @@
     "test:ribbon": "node work/test-thin-ribbon-browser.mjs && node work/test-moving-ribbon-browser.mjs",
     "test:reading-layout": "node work/test-reading-layout-browser.mjs",
     "test:public-ribbon": "node work/test-public-ribbon.mjs && node work/test-global-ribbon-browser.mjs",
-    "test:suggested-assets": "node work/test-suggested-assets.mjs && node work/test-intelligence-core.mjs"
+    "test:suggested-assets": "node work/test-suggested-assets.mjs && node work/test-intelligence-core.mjs",
+    "test:strategies": "node work/test-trading-strategies.mjs && node work/test-trade-research.mjs && node work/test-venue-activity.mjs && node work/test-paper-retention.mjs && node work/test-axo-score.mjs && node work/test-paper.mjs",
+    "test:strategies-browser": "node work/test-trading-browser.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

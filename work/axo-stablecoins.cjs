@@ -7,13 +7,13 @@ const canonical=Object.freeze({
  ethereum:{stable:['0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48','0xdac17f958d2ee523a2206206994597c13d831ec7','0x6B175474E89094C44Da98b954EedeAC495271d0F'],wrapped:['0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2']},
  base:{stable:['0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'],wrapped:['0x4200000000000000000000000000000000000006','0xDeadDeAddeAddEAddeadDEaDDEAdDeaDDeAD0000']},
  bsc:{stable:['0x55d398326f99059ff775485246999027b3197955','0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d','0xe9e7cea3dedca5984780bafc599bd69add087d56','0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3'],wrapped:['0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c']},
- solana:{stable:['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v','Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'],wrapped:['So11111111111111111111111111111111111111112','9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP']},
+ solana:{native:['11111111111111111111111111111111'],stable:['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v','Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'],wrapped:['So11111111111111111111111111111111111111112','9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP']},
  robinhood:{stable:['0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168'],wrapped:['0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73']},
  arc:{stable:['0x3600000000000000000000000000000000000000'],wrapped:[]}
 });
 const address=p=>p.address||p.mint||p.tokenAddress,eq=(a,b,c)=>typeof a==='string'&&typeof b==='string'&&(c==='solana'?a===b:a.toLowerCase()===b.toLowerCase());
 function isStablecoin(p){if(!p||typeof p!=='object')return false;const a=address(p),c=p.chain;if(a){const verified=p.credibleListing;return !!(canonical[c]?.stable.some(v=>eq(a,v,c))||verified?.chain===c&&eq(a,verified.address,c)&&ids.has(String(verified.coinId).toLowerCase()));}const id=p.coingeckoId||p.coingeckoCoinId||p.coingecko_coin_id||p.credibleListing?.coinId;return !!(id&&ids.has(String(id).toLowerCase())||pairs.has(norm(p.symbol)+':'+norm(p.name)))}
-function isNative(p){if(!p||!canonical[p.chain])return false;const a=address(p);return !!(canonical[p.chain].wrapped.some(v=>eq(a,v,p.chain))||p.chain==='arc'&&eq(a,canonical.arc.stable[0],p.chain)||p.chain!=='solana'&&typeof a==='string'&&/^0x(?:0{40}|e{40})$/i.test(a)||!a&&p.assetType==='native');}
-const isSuggestedProject=p=>!isStablecoin(p)&&!isNative(p);
+function isNative(p){if(!p||!canonical[p.chain])return false;const a=address(p);return !!(canonical[p.chain].native?.some(v=>eq(a,v,p.chain))||canonical[p.chain].wrapped.some(v=>eq(a,v,p.chain))||p.chain==='arc'&&eq(a,canonical.arc.stable[0],p.chain)||p.chain!=='solana'&&typeof a==='string'&&/^0x(?:0{40}|e{40})$/i.test(a)||!a&&p.assetType==='native');}
+const isSuggestedProject=p=>!!p&&typeof p==='object'&&!isStablecoin(p)&&!isNative(p);
 return Object.freeze({isStablecoin,isNative,isSuggestedProject,canonical,source:directory.source,observedAt:directory.observedAt,count:directory.assets.length});
 });
