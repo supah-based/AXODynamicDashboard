@@ -1,0 +1,7 @@
+{
+  "protocol": "axo-coordination-enrollment-v1",
+  "version": 1,
+  "challengeId": "builder-openclaw-2026-10-14-01",
+  "challenge": "axo-builder-openclaw-enrollment-v1-bec68b058f7829fbecefac9cde451e08eb397030c7138ce8e65eb9fa3e44dee9",
+  "audience": "axo-builder-coordination-local-v1"
+}

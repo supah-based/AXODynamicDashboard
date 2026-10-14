@@ -1,12 +1,13 @@
 /* Optional server/CLI transport seam. No gateway method or live connection is assumed. */
 import fs from 'node:fs/promises';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createPrivateKey} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {safePayload} from './axo-durable-store.mjs';
 import {responseJson} from './axo-http-json.mjs';
+import {signRequest} from './axo-coordination-service.mjs';
 import Stream from './axo-stream-schema.cjs';
 export function coordinationMessage(input,now=Date.now()){
- if(!input||!['status-question','update','result','ping'].includes(input.kind)||typeof input.text!=='string'||!input.text.trim()||input.text.length>1500||!/^[-a-zA-Z0-9_]{1,80}$/.test(input.correlationId||''))throw Error('Bounded typed coordination message required.');
+ if(!input||!['status-question','update','result','ping'].includes(input.kind)||typeof input.text!=='string'||!input.text.trim()||input.text.length>1200||!/^[-a-zA-Z0-9_]{1,80}$/.test(input.correlationId||''))throw Error('Bounded typed coordination message required.');
  const message={version:1,id:input.id||randomUUID(),correlationId:input.correlationId,sender:'axo-builder',destination:'openclaw',at:now,kind:input.kind,text:input.text,context:input.context||{}};if(!/^[a-zA-Z0-9-]{1,64}$/.test(message.id)||Buffer.byteLength(JSON.stringify(message))>4096)throw Error('Coordination payload too large or invalid.');safePayload(message);if(/0x[a-f0-9]{40}|(?:\bBearer\s|\bsk-|\bghp_|private key)|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(message.text))throw Error('Use public project references in validated context, never credentials or account details in coordination text.');if(Object.keys(message.context).some(k=>!['commit','schemaVersion','publicProject','capability','status'].includes(k)))throw Error('Unsupported coordination context.');if(message.context.publicProject){if(Object.keys(message.context.publicProject).some(k=>!['chain','address','pool'].includes(k)))throw Error('Only an exact public project reference is allowed.');message.context.publicProject=Stream.exact(message.context.publicProject);}for(const k of ['commit','capability','status'])if(message.context[k]!==undefined&&(typeof message.context[k]!=='string'||message.context[k].length>100))throw Error('Bounded public coordination metadata required.');return message;
 }
 export function createCoordination({file,transport=null,now=Date.now}={}){
@@ -19,7 +20,7 @@ export function createCoordination({file,transport=null,now=Date.now}={}){
  const status=()=>({version:1,configured:Boolean(transport),connected:false,authenticatedDeliveryVerified:audit.length>0,queued:outbox.length,acknowledged:audit.length,nextEligibleAt:next,mode:'Explicit active-process delivery; no always-on Codex chat, remote wakeup, shell, SQL or arbitrary tools.'});
  return {load,enqueue,flush,status};
 }
-export function coordinationTransport({endpoint=process.env.AXO_COORDINATION_ENDPOINT,token=process.env.AXO_COORDINATION_TOKEN,fetchImpl=fetch}={}){
- if(!endpoint||!token)return null;const u=new URL(endpoint);if(u.protocol!=='https:'||u.hostname!=='claw.supah.ai'||u.port||u.username||u.password||u.search||u.hash||token.length<16)throw Error('Private counterpart endpoint and scoped credential required.');
- return async message=>{const r=await fetchImpl(u.href,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify({protocol:'axo-coordination-v1',message}),redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Coordination counterpart unavailable.');return responseJson(r,'Coordination counterpart');};
+export function coordinationTransport({endpoint=process.env.AXO_COORDINATION_ENDPOINT,privateKeyFile=process.env.AXO_COORDINATION_PRIVATE_KEY_FILE,fetchImpl=fetch}={}){
+ if(!endpoint)return null;const u=new URL(endpoint);if(u.protocol!=='http:'||u.hostname!=='127.0.0.1'||u.port!=='3457'||u.username||u.password||u.pathname!=='/api/coordination/v1/messages'||u.search||u.hash)throw Error('Exact signed counterpart endpoint required.');if(!privateKeyFile)return null;
+ return async message=>{const st=await fs.stat(privateKeyFile);if((st.mode&0o077)!==0)throw Error('Coordination private key file must be mode 0600.');const privateKeyPem=await fs.readFile(privateKeyFile,'utf8');if(createPrivateKey(privateKeyPem).asymmetricKeyType!=='ed25519')throw Error('Coordination private key must be Ed25519.');const body=Buffer.from(JSON.stringify({protocol:'axo-coordination-v1',message})),auth=signRequest({privateKeyPem,method:'POST',target:u.pathname,body});const r=await fetchImpl(u.href,{method:'POST',headers:{'content-type':'application/json','x-axo-key-id':auth.keyId,'x-axo-timestamp':String(auth.timestamp),'x-axo-nonce':auth.nonce,'x-axo-signature':auth.signature},body,redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Coordination counterpart unavailable.');return responseJson(r,'Coordination counterpart');};
 }

@@ -36,34 +36,24 @@ Provide exact chain + contract (+ pool), schema version, source URLs and observe
 
 Document actual transport/method, schema/capabilities and rate/cache policy without secrets. Provision minimal credentials privately server-side via an approved operator channel or ignored configuration; never Git/chat/frontend. Development consumes public shared research and isolates fixtures/dev writes. Builder verifies one authenticated project read, exact identity, source dates, pagination/dedupe, excluded private fields and revoked access. Do not call the connection complete before that succeeds.
 
-## OpenClaw task: live builder coordination
+## OpenClaw task: secretless Builder coordination counterpart
 
-The existing paired gateway adapter supports only advertised `health`, `status`, `models.list` with `operator.read`; it cannot send messages. Do not expand it to unverified gateway commands.
+Implemented an isolated counterpart in `work/axo-coordination-service.mjs`, launcher `work/axo-coordination-server.mjs`, and local operator CLI `work/axo-coordination-cli.mjs`. It binds only `127.0.0.1:3457`; the only local routes are `/healthz`, signed `POST /api/coordination/v1/messages`, and signed `GET /api/coordination/v1/results`. No Caddy/Gateway route points to this port; public exposure is withheld pending an independently authorized AXO-native x402 USDC-on-Base transport. Caddy, Gateway config, credentials and the main app were not modified. The separate loopback service `axo-builder-coordination` is online; it cannot accept an authenticated Builder request until Builder enrolls its public key.
 
-`axo-builder-coordination.mjs` and `axo-coordinate-cli.mjs` provide an optional server/CLI seam, inert without configuration. They have typed status questions/updates/results/pings, IDs/correlation IDs, a twenty-message durable outbox, idempotent acknowledgments, five-second delivery spacing, one-minute error backoff, bounded payloads and metadata-only audit history. Only the configured `claw.supah.ai` HTTPS destination is allowed. No public message/command endpoint, arbitrary shell/SQL/tool execution or automatic trust of received agent text.
+Requests authenticate with enrolled Ed25519 public keys, per-request signatures, five-minute timestamp skew, unique durable nonces and persisted message-ID dedupe. The 8 KiB request limit, exact sender/destination/schema, private-field/value screening, exact public-project identities, 0700 state directory, atomic 0600 journal and revocation are enforced. No bearer secret or production private key was generated. Inbound content has no shell, SQL, tool, wallet, or model execution path. CLI `process` emits only fixed harmless responses to `ping` / `status-question`; other messages are only recorded.
 
-OpenClaw must identify/install an actual supported counterpart and privately provision `AXO_COORDINATION_ENDPOINT` and dedicated `AXO_COORDINATION_TOKEN`. No gateway route is assumed. Proposed envelope and acknowledgment:
+Enrollment challenge: `docs/coordination-enrollment-challenge.json`. Builder-specific key generation, secure storage, signed challenge response, request signing, results polling and operator CLI instructions: `docs/BUILDER_COORDINATION.md`. The Builder must generate its own Ed25519 private key in its protected environment, commit only its public key/signed challenge response, and provide the reviewed commit hash. OpenClaw then runs `node work/axo-coordination-cli.mjs enroll <response.json>` locally. Do not send private key material in chat or Git, and do not configure a bearer token.
 
-```json
-{"protocol":"axo-coordination-v1","message":{"version":1,"id":"<id>","correlationId":"<correlation>","sender":"axo-builder","destination":"openclaw","at":0,"kind":"ping","text":"Check deployed revision","context":{}}}
-```
-
-```json
-{"version":1,"id":"<same id>","sender":"openclaw","status":"accepted","at":0}
-```
-
-Use current UTC epoch milliseconds for `at`. Counterpart must validate authentication/scopes, reject private data and persist deduplication. Specify its supported polling/events/results contract before inbound delivery is added; no polling route is invented here.
-
-An active builder can run `node work/axo-coordinate-cli.mjs status`, `send <bounded-message.json>` or explicit `flush` with credentials in its server/CLI environment. OpenClaw may host a bounded background dispatcher after counterpart setup. This Codex chat is not always on; live notifications/wakeups require an explicitly supported integration and no automation is created here. Validate one harmless authenticated ping and result, duplicate/restart/outage/auth-denied cases and revocation/disablement. Current status is **not configured / not connected**. Unit acknowledgment fixtures are not a live link.
+The loopback listener is online with zero enrolled keys; the remote Builder link is not connected or live-proven. Once Builder supplies the signed public enrollment response, stop only `axo-builder-coordination`, enroll the key locally as `axostreams`, restart the isolated service, then verify signed ping/ack/result polling. A separate AXO-native x402 transport is required before any off-host access. Do not claim connectivity until the authenticated round trip succeeds.
 
 ## OpenClaw acknowledgment — production integration 2026-10-14
 
 - Installed app revision and migration versions: Builder release `ce123912dcc256c775e1268aa22dfd4714e3db8e` was fast-forwarded and deployed; the acceptance-fix integration commit is recorded by the live `/api/release` after the final restart. Isolated PostgreSQL migrations 001–006 are applied; migration 006 checksum prefix is `74203d08ec53` and `axo_project_progress` exists.
 - Actual read-only knowledge transport/schema (no credentials): Existing public exact-project `/api/project` and signed-holder `/api/project-evidence` routes are live. No dedicated Builder-authenticated shared-knowledge transport from the proposed schema has been provisioned, so that task remains not connected rather than inferred from the public routes.
-- Private provisioning and minimal scope confirmed: No coordination or shared-knowledge credential was added. `AXO_COORDINATION_ENDPOINT` and `AXO_COORDINATION_TOKEN` remain unset; the coordination seam is inert and exposes no public command endpoint.
+- Private provisioning and minimal scope confirmed: No coordination secret or production private key was generated. Builder public-key enrollment is pending; the loopback-only service is online and refuses unsigned requests.
 - Authenticated sample project read and source-date validation: Not performed because no dedicated authenticated Builder knowledge transport exists. Existing public project/evidence tests passed exact identity, source-date, stale/missing and private-field exclusion boundaries.
-- Coordination counterpart and authenticated ping/result outcome: Not configured / not connected. Unit fixtures passed bounded schema, destination restriction, durable outbox/restart and idempotent acknowledgment behavior; no live ping was claimed.
-- Revoke/disable/rollback checks: Absence of coordination configuration leaves dispatch disabled. Rollback is the prior app revision with an `axo-streams`-only restart; additive migration 006 and existing private/public data must be retained.
+- Coordination counterpart and authenticated ping/result outcome: The signed counterpart and focused fixtures passed. Local `/healthz` returns 200, unsigned POST returns 401 and the listener is `127.0.0.1:3457`; no Builder public key is enrolled and no authenticated live ping/result is claimed.
+- Revoke/disable/rollback checks: Revocation is available through the local CLI and is covered by tests. The isolated listener is running with no enrolled keys. Stop the service before local enrollment/revocation to avoid concurrent journal writers; remove its isolated service and retain its audit journal when disabling. Existing app rollback is independent.
 - Remaining production/provider acceptance gaps: Real signed two-wallet/two-device workspace checks, a real microphone/model voice request, and the user's exact Robinhood project with real-wallet selected-chain balance, percent/Max, network rejection, automatic quote and explicit approval remain interactive acceptance gates. No trade was executed.
 
 ## Radio retirement and ribbon acceptance
