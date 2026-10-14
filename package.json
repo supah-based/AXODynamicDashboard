@@ -1,6 +1,6 @@
 {
   "name": "axo-local-research-dashboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -24,7 +24,10 @@
     "test:rebounds": "node work/test-rebound-model.mjs && node work/test-rebound-service.mjs && node work/test-rebound-development.mjs && node work/test-rebound-api.mjs && node work/test-rebound-intent.mjs",
     "test:rebound-browser": "node work/test-rebound-browser.mjs",
     "test:durable": "node work/test-durable-store.mjs",
-    "test:stream-memory": "node work/test-stream-memory-store.mjs && node work/test-stream-memory-api.mjs"
+    "test:stream-memory": "node work/test-stream-memory-store.mjs && node work/test-stream-memory-api.mjs",
+    "build:release": "node work/build-release.mjs",
+    "test:personal-intelligence": "node work/test-stream-contract.mjs && node work/test-personal-intelligence.mjs && node work/test-release.mjs && node work/test-personal-ui.mjs && node work/test-community-api.mjs",
+    "test:release-routes": "node work/test-intelligence-routes.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

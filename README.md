@@ -97,7 +97,7 @@ Launchpad discovery includes eleven platform entries. Direct Pons, PAR, and Rayd
 
 AXO scores rank available research evidence; they are not probabilities of profit. Contract screening and available simulation results describe tested conditions. Portfolio daily P&L requires adequate balance and cash-flow history.
 
-Wallet ownership and holder gating are now enforced for the protected AI endpoints. Other browser-session workspaces remain local prototypes. Shared ecosystem publishing and account linking still need their own ownership, validation and authorization flow; holding a Whale tier does not yet publish changes for everyone.
+Wallet ownership and holder gating are enforced for protected AI endpoints. Version 0.2.0 adds signed-wallet private workspace persistence when the existing database is migrated, including Watchlist, Favorites, streams, alerts and editable opt-in memory. Anonymous browser records remain a separate fallback and migrate only by user choice. Explicit community research uses signed consent and aggregate privacy gates; shared root-directory publishing remains a separate reviewed capability.
 
 MIT licensed; see [LICENSE](LICENSE).
 
@@ -126,3 +126,9 @@ Source cache checks memory, then fresh exact-request durable records, then upstr
 ### Anonymous stream continuity
 
 Migration `002_stream_memory.sql` adds first-party anonymous workspaces identified only by the SHA-256 digest of a random Secure/HttpOnly/SameSite=Lax cookie token. It stores up to 12 saved stream definitions with optimistic revisions and a separate bounded deletion-tombstone set, plus exact chain/token/pool observations with timestamps and counts. No wallet, IP address, user agent, account state, or ticker-based identity is stored. Project history is retained for at most 180 days; project rows referenced by retained history are protected from project-cache pruning. The same-origin `/api/stream-memory` endpoint accepts bounded normalized shortcut and public project observations; unavailable PostgreSQL fails closed while browser localStorage continues as the offline fallback. Apply numbered migrations only through the documented operator maintenance procedure after backup; this implementation task does not run migrations or restart services. Test with `npm run test:stream-memory` and `npm run test:durable`.
+
+## Personal intelligence release 0.2.0
+
+See [the OpenClaw deployment handoff](docs/OPENCLAW_HANDOFF.md) for the complete nine-item implementation map, migrations 003/004, private accounting source contract, verification and rollback. Project dossiers, private signals, sourced category connections, community research and quality views are connected to the application. The subtle logo-adjacent build tooltip and `/api/release` identify the server startup revision, including unpublished/changed-asset states.
+
+Run `pnpm run test:personal-intelligence`, `pnpm run test:stream-memory` and `pnpm run test:durable` for deterministic checks. With the local server running, `pnpm run test:release-routes` checks all dashboard scripts and unsigned private access without model calls or transactions. Use `pnpm run build:release` after checking out the intended clean revision and before restarting the application. Existing operator queue budgets and provider choices remain unchanged. Real database migration, signed-device acceptance and private ledger coverage require verification on the deployment; unavailable account history never becomes a zero balance or profit claim.

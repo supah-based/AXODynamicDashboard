@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+const base=process.env.AXO_TEST_URL||'http://127.0.0.1:43187',origin=new URL(base).origin;
+const html=await (await fetch(base)).text(),scripts=[...new Set([...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map(m=>m[1]))];
+for(let i=0;i<scripts.length;i+=6)await Promise.all(scripts.slice(i,i+6).map(async url=>{assert(url.startsWith('/'));const r=await fetch(origin+url);assert.equal(r.status,200,url);assert.match(r.headers.get('content-type'),/javascript/);assert((await r.text()).length>10,url);}));
+const release=await (await fetch(origin+'/api/release')).json();assert.equal(release.version,'0.2.0');assert(['startup-git','unknown','deployment-environment','build-manifest'].some(s=>release.source.startsWith(s)));assert(!JSON.stringify(release).includes('C:\\Users'));
+const quality=await (await fetch(origin+'/api/intelligence-quality')).json();assert.equal(quality.streamSchema,2);assert(quality.capabilities.manage_inbox);assert(quality.capabilities.investigate);assert(quality.capabilities.add_card);
+for(const route of ['/api/personal-workspace','/api/signal-inbox','/api/accounting','/api/community/own'])assert.equal((await fetch(origin+route)).status,401,route+' requires signed ownership');
+for(const route of ['/api/personal-workspace','/api/signal-inbox','/api/accounting','/api/community','/api/project-evidence']){const r=await fetch(origin+route,{method:'POST',headers:{origin,'content-type':'application/json','x-axo-request':'1'},body:JSON.stringify({action:'interest',project:{chain:'base',address:'0x'+'a'.repeat(40)}})});assert.equal(r.status,401,route+' refuses unsigned mutation before source work');}
+console.log('PASS all '+scripts.length+' dashboard script routes, build/capability metadata, private read isolation and unsigned mutation gates. No wallet signatures, model calls or trades executed.');

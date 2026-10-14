@@ -1,7 +1,7 @@
 /* Shared typed/voice UI actions. Models select data-bound layouts, never executable code. */
 const axoIntentMetrics={price:'Price · USD',marketCap:'Market cap · USD',liquidity:'Liquidity · USD',volume24:'Volume · 24h USD',change24:'Change · 24h',holders:'Holders',axoScore:'Axo score · evidence /100'};
 let axoIntentPending=null,axoIntentController=null,axoIntentSequence=0,axoSelection=null;
-function axoRequestedView(v){if(!v||typeof v.title!=='string'||!Array.isArray(v.metrics)||!Array.isArray(v.components))return null;return {title:v.title.slice(0,80),templateId:/^[a-f0-9]{24}$/.test(v.templateId||'')?v.templateId:null,scoreMin:Number.isFinite(v.scoreMin)?Math.max(0,Math.min(100,v.scoreMin)):null,scoreMax:Number.isFinite(v.scoreMax)?Math.max(0,Math.min(100,v.scoreMax)):null,liquidityMin:Number.isFinite(v.liquidityMin)?v.liquidityMin:null,volumeMin:Number.isFinite(v.volumeMin)?v.volumeMin:null,rankBy:v.rankBy==='axoScore'?'axoScore':'activity',components:v.components.filter(x=>['ranked_list','metric_table','rebound_radar','bounce_board'].includes(x)).slice(0,2),metrics:v.metrics.filter(x=>Object.hasOwn(axoIntentMetrics,x)).slice(0,6)}}
+function axoRequestedView(v){return AxoStreamSchema.requested(v);}
 const intentNormalize=axoNormalizeStream;axoNormalizeStream=function(v){const s=intentNormalize(v),view=axoRequestedView(v?.requestedView);if(['discovery','rebound'].includes(s.type)&&view)s.requestedView=view;return s};
 const intentTitle=axoStreamTitle;axoStreamTitle=function(s=axoStream){return s.requestedView?.title||intentTitle(s)};
 const intentSave=discoverySave;discoverySave=function(){intentSave();try{localStorage.setItem('axo-requested-view-v1',JSON.stringify(axoStream.requestedView||null))}catch{}};

@@ -1,4 +1,6 @@
 
+/axo-build.json
+!/work/build-release.mjs
 # Local credentials: never commit or publish
 .env
 .env.*
@@ -53,3 +55,5 @@ Thumbs.db
 /outputs/axo-brand-set/manifest.json
 
 !/work/build-reown.mjs
+
+!/work/build-release.mjs

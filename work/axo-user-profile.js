@@ -41,7 +41,7 @@ function userGame(state){const g=state.game;return '<p class="user-score">'+(g?.
 
 /* Personal facts are bound to the current wallet; device preferences remain explicitly local. */
 let axoUserPolicy=null,axoUserBalance=null,axoUserError='',axoUserGeneration=0,axoUserWalletKey='',axoUserTier=null;
-const axoUserKey=()=>axoWallet?axoWallet.kind+':'+axoWallet.address.toLowerCase()+':'+(axoWallet.kind==='evm'?4663:'solana'):'';
+const axoUserKey=()=>axoWallet?axoWallet.kind+':'+(axoWallet.kind==='solana'?axoWallet.address:axoWallet.address.toLowerCase())+':'+(axoWallet.kind==='evm'?4663:'solana'):'';
 function axoUserClear(){axoUserGeneration++;axoUserEvidence=null;axoUserWalletKey=axoUserKey();axoUserBalance=null;axoUserTier=null;axoUserError='';if(axoStream.type==='profile'&&!modalOpen)render(false)}
 let axoUserReadController=null,axoUserLastAttempt=0;
 async function axoUserRead(){axoUserReadController?.abort();axoUserClear();axoUserLastAttempt=Date.now();const generation=axoUserGeneration,key=axoUserKey(),w=axoWallet;if(!w||w.kind!=='evm')return;const controller=new AbortController();axoUserReadController=controller;
