@@ -1,11 +1,12 @@
 /* Public on-screen references resolve against server-owned records, never client metrics. */
 import AxoScore from './axo-score.cjs';
+import MarketIntel from './axo-market-intel.cjs';
 import AxoRiskPolicy from './axo-risk-policy.cjs';
 const chains=['solana','base','bsc','ethereum','robinhood','arc'];
 const eq=(a,b,c)=>typeof a==='string'&&typeof b==='string'&&(c==='solana'?a===b:a.toLowerCase()===b.toLowerCase());
 const address=(a,c,pool=false)=>typeof a==='string'&&(c==='solana'?/^[1-9A-HJ-NP-Za-km-z]{32,44}$/:(pool?/^0x(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/:/^0x[a-fA-F0-9]{40}$/)).test(a);
 const fields=['chain','address','pair','name','symbol','price','marketCap','liquidity','volume5','volume1','volume6','volume24','change1','change24','createdAt','tokenCreatedAt','seenAt','provider','observationStatus','sourceSample','url'];
-export function publicProject(p){const out=Object.fromEntries(fields.flatMap(k=>{const v=p?.[k];return typeof v==='string'?[[k,v.slice(0,300)]]:typeof v==='number'&&Number.isFinite(v)?[[k,v]]:v===null?[[k,null]]:[]}));if(p?.transactions)out.transactions=Object.fromEntries(['m5','h1','h6','h24'].map(k=>[k,Object.fromEntries(['buys','sells'].map(side=>[side,Number.isSafeInteger(p.transactions[k]?.[side])&&p.transactions[k][side]>=0?p.transactions[k][side]:null]))]));return out;}
+export function publicProject(p){const out=Object.fromEntries(fields.flatMap(k=>{const v=p?.[k];return typeof v==='string'?[[k,v.slice(0,300)]]:typeof v==='number'&&Number.isFinite(v)?[[k,v]]:v===null?[[k,null]]:[]}));if(MarketIntel.integrity(p).issues.length)out.activityIntegrity={status:'inconsistent'};if(p?.transactions)out.transactions=Object.fromEntries(['m5','h1','h6','h24'].map(k=>[k,Object.fromEntries(['buys','sells'].map(side=>[side,Number.isSafeInteger(p.transactions[k]?.[side])&&p.transactions[k][side]>=0?p.transactions[k][side]:null]))]));return out;}
 export function dashboardReferences(input,stream,now=Date.now()){
  if(input?.version!==1||!Number.isFinite(input.capturedAt)||input.capturedAt>now+1000||now-input.capturedAt>120000)return null;
  const scope=stream?.project?[stream.project.chain]:stream?.chain?[stream.chain]:stream?.type==='discovery'?stream.discovery?.chains:stream?.filters?.chains;

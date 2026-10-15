@@ -15,7 +15,7 @@ const numbers=['price','liquidity','marketCap','fdv','volume5','volume1','volume
 // Public market facts only. Never persist users, wallet balances, raw prompts or community members.
 function clean(p){
  if(!p||!chains.includes(p.chain)||!chainAddress(p.address,p.chain)||!chainAddress(p.pair,p.chain,true)||!Assets.isSuggestedProject(p))return null;
- const row={chain:p.chain,address:p.address,pair:p.pair,id:p.chain+':'+p.pair,seenAt:p.seenAt};
+ const row={...(Intel.integrity(p).issues.length?{activityIntegrity:{status:'inconsistent'}}:{}),chain:p.chain,address:p.address,pair:p.pair,id:p.chain+':'+p.pair,seenAt:p.seenAt};
  for(const k of numbers)row[k]=Number.isFinite(p[k])?p[k]:null;
  for(const k of ['name','symbol','provider','tokenAgeSource','holdersSource'])if(typeof p[k]==='string')row[k]=p[k].slice(0,100);
  for(const k of ['imageUrl','bannerUrl','url'])try{const u=new URL(p[k]);if(u.protocol==='https:'&&!u.username&&!u.password&&u.href.length<=350)row[k]=u.href;}catch{}

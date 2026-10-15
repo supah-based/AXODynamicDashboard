@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {portfolioRisk,allocationRisk,portfolioLimits} from './axo-portfolio-risk.mjs';
 import {experimentId,recordCompletedTrade,paperEvaluation} from './axo-paper-evaluation.mjs';
 import {validatePaperDecision,PAPER_DEFAULTS,newPaperState,applyPaperEvent} from './axo-paper.mjs';
-import {strategyConfig} from './axo-trade-strategy.mjs';
+import {strategyConfig,STRATEGY_DEFAULTS} from './axo-trade-strategy.mjs';
 const now=Date.parse('2026-10-14T12:00:00Z'),mark=(equity,positions=[])=>({complete:true,equityCents:equity,positions}),state={config:{},portfolio:null};
 const first=portfolioRisk(state,mark(100000),now);
 assert.equal(first.dayStartEquityCents,100000);assert.equal(first.allowEntries,true);
@@ -17,7 +17,7 @@ const exposure=portfolioRisk(state,mark(100000,[{chain:'base',marketValueCents:2
 assert.match(allocationRisk(exposure,'base',6000,0),/chain/);assert.match(allocationRisk(exposure,'bsc',11000,0),/Total/);
 assert.equal(allocationRisk(exposure,'bsc',10000,0),null);assert.match(allocationRisk(exposure,'bsc',10000,1),/Total/,'Fees lower the post-trade equity denominator');
 for(const config of [{maxDailyLossPct:0},{maxPortfolioDrawdownPct:Infinity},{maxGrossExposurePct:20,maxChainExposurePct:30}])assert.throws(()=>portfolioLimits(config));
-assert.equal(strategyConfig({version:'caller-version',engine:'luna'}).version,'paper-strategy-v2');assert.equal(strategyConfig({engine:'luna'}).engine,'strategies');
+assert.equal(strategyConfig({version:'caller-version',engine:'luna'}).version,STRATEGY_DEFAULTS.version);assert.equal(strategyConfig({engine:'luna'}).engine,'strategies');
 const id=experimentId({b:2,a:{z:4,c:3}});assert.equal(id,experimentId({a:{c:3,z:4},b:2}));assert.notEqual(id,experimentId({a:{c:3,z:5},b:2}));
 const journal={stats:{},positions:{test:{at:now-8*86400000,initialOutlayCents:10000,costCents:5000,netProceedsCents:6000,plan:{experimentId:id}}}};
 const sell=(remainingQuantity,net)=>({at:now,data:{result:{action:'sell',accepted:true,fill:{key:'test',remainingQuantity,netProceedsCents:net}}}});

@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import Intel from './axo-market-intel.cjs';
+import {createGmgnData} from './axo-gmgn-data.mjs';
+import {createProjectData} from './axo-project-data.mjs';
+import {createObservationBook} from './axo-observation-book.mjs';
+import {publicRibbon} from './axo-public-ribbon.mjs';
+import {tradeSetup} from './axo-trade-strategy.mjs';
+import {screenProjects} from './axo-project-screens.mjs';
+import {createIntelligencePulse} from './axo-intelligence-pulse.mjs';
+import {createDiscoveryMemory} from './axo-discovery-memory.mjs';
+import {publicProject} from './axo-answer-context.mjs';
+let at=Date.now();const initial=at,address='0x'+'1'.repeat(40),pair='0x'+'2'.repeat(40),p={id:'integrity-fixture',chain:'base',address,pair,provider:'Fixture provider',seenAt:at,price:1,marketCap:1000000,liquidity:100000,volume5:1000,volume1:6500,volume24:30000,transactions:{m5:{buys:15,sells:5},h1:{buys:40,sells:20}}};
+const risk=project=>({chain:project.chain,address:project.address,status:'available',source:'GoPlus',receivedAt:at,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0'}))});
+assert.equal(Intel.brief(p,{risk:{status:'screened'},now:at}).state,'investigate');
+for(const bad of [{...p,volume5:8000},{...p,transactions:{m5:{buys:80,sells:30},h1:{buys:10,sells:5}}},{...p,volume1:Infinity},{...p,transactions:{m5:{buys:1.5,sells:2}}},{...p,buys:40.5},{...p,buys:80}]){
+ assert.equal(Intel.quality(bad,at).status,'inconsistent');assert.equal(Intel.brief(bad,{risk:{status:'screened'},now:at}).state,'check-data');assert.equal(Intel.brief(bad,{risk:{status:'screened'},now:at}).signals.length,0);
+ assert.equal(publicRibbon({pools:[bad],risk,now:at}).projects.length,0);const book=createObservationBook({now:()=>at});assert.equal(book.observe(bad).status,'unavailable');assert.equal(book.status().snapshots,0);
+ assert.equal(screenProjects([{...bad,createdAt:at-60000}],'degen',{now:at}).length,0);
+ const simulation={chain:p.chain,address,pool:pair,status:'available',receivedAt:at,simulationSuccess:true,isHoneypot:false,buyTax:0,sellTax:0},setup=tradeSetup(bad,{risk:risk(p),simulation},undefined,at);assert.equal(setup.eligible,false);assert.ok(setup.gaps.some(g=>/Inconsistent market activity/.test(g)));assert.equal(setup.execution.status,'simulated-route-observed','Entry evidence failure does not suppress an independent valid exit-route observation');
+}
+assert.equal(Intel.integrity({...p,volume5:1001,volume1:1000}).status,'no_conflict_observed','Bounded rounding tolerance');assert.equal(Intel.integrity({...p,volume5:null,volume1:null,transactions:{}}).issues.length,0,'Missing fields are gaps, not contradictions');
+for(const bad of [{...p,buys:80},{...p,volume5:Infinity},{...p,transactions:{m5:{buys:15.5,sells:5}}}]){const memory=createDiscoveryMemory({risk,now:()=>at});await memory.ingest([bad]);const saved=memory.snapshot().projects[0];assert.equal(saved.activityIntegrity.status,'inconsistent');assert.deepEqual(saved.discoveryKinds,[]);assert.equal(saved.discoveryMemory.opportunity,false);assert.equal(publicRibbon({pools:[saved],risk,now:at}).projects.length,0);assert.equal(publicProject(bad).activityIntegrity.status,'inconsistent');}
+let candidate=p;const pulse=createIntelligencePulse({now:()=>at,autoStart:false,getPools:()=>[candidate],security:{local:()=>risk(p),security:async()=>risk(p)}});await pulse.tick();at+=60000;candidate={...p,seenAt:at,volume1:15000,volume5:16000};await pulse.tick();assert.equal(pulse.snapshot().events.filter(e=>e.type==='activity').length,0,'Contradictory volume cannot emit a positive pulse');await pulse.stop();at=initial;
+for(const extra of [{v5:8000,v1:7000},{holders:100.5}]){const book=createObservationBook({now:()=>at,store:{enabled:true,get:async()=>({data:{version:1,series:[{identity:{chain:p.chain,address,pool:pair,provider:p.provider},points:[{at:at-120000,price:1,liquidity:100000,v5:1000,v1:6500,buys:20,sells:5,holders:100,holdersAt:at-120000,...extra}]}]}})}});await book.ready();assert.equal(book.status().snapshots,0,'Malformed older cache points cannot re-enter trend evidence');}
+let mode='ok',calls=0;const gm=createGmgnData({apiKey:()=> 'synthetic-key',now:()=>at,fetchImpl:async()=>{calls++;if(mode==='network')throw Error('synthetic transport failure');if(mode==='429')return new Response('{}',{status:429,headers:{'retry-after':'120'}});return new Response(JSON.stringify({code:0,data:{address,holder_count:100,price:{price:'1',volume_5m:100},stat:{top_10_holder_rate:.8}}}));}});
+const [one,two]=await Promise.all([gm.info(p),gm.info(p)]);assert.equal(calls,1);one.activity['5m'].volumeUsd=999;assert.equal(two.activity['5m'].volumeUsd,100);assert.equal((await gm.info(p)).activity['5m'].volumeUsd,100);
+at+=120001;mode='network';const dated=await gm.info(p);assert.equal(dated.receivedAt,initial);assert.equal(dated.stale,true);assert.equal(dated.refreshStatus,'schema_or_transport_gap');assert.equal(dated.holderCount,100);const before=calls;await gm.info(p);assert.equal(calls,before,'Failed refresh is briefly cached without re-dating prior success');
+const current={...p,seenAt:at};assert.ok(!Intel.brief(current,{risk:{status:'screened'},now:at,external:dated}).cautions.some(c=>c.includes('GMGN')),'Retained reports cannot be treated as a current external caution');
+at+=30001;mode='429';const throttled=await gm.info(p);assert.equal(throttled.receivedAt,initial);assert.equal(throttled.refreshStatus,'rate_limited');assert.ok(gm.status().cooldownUntil>=at+120000);
+at=initial+900001;mode='network';const expired=await gm.info(p);assert.notEqual(expired.status,'available');assert.equal(expired.receivedAt,null);
+at=initial;
+const bodyLimited=createGmgnData({apiKey:()=> 'synthetic-key',now:()=>at,fetchImpl:async()=>new Response(JSON.stringify({code:429,reset_at:Math.floor(at/1000)+600}),{status:429})});assert.equal((await bodyLimited.info(p)).status,'rate_limited');assert.ok(bodyLimited.status().cooldownUntil>=at+599000,'Provider reset hints in error bodies are respected');
+const raw={chainId:'base',pairAddress:pair,baseToken:{address,symbol:'FIX'},priceUsd:'1',liquidity:{usd:100000},volume:{m5:1000,h1:6500,h24:30000},txns:p.transactions};
+const api=createProjectData({now:()=>at,gecko:{get:async()=>{throw Error('synthetic outage');}},dex:{get:async()=>({data:[raw],at})},simulation:{simulation:()=>{throw Error('simulation failed');}},enrichment:{info:()=>{throw Error('enrichment failed');}}});
+const [a,b]=await Promise.all([api.snapshot({chain:'base',address,pool:pair}),api.snapshot({chain:'base',address,pool:pair})]);assert.equal(a.market.primary.price,1);assert.equal(a.onchain.simulation.status,'unavailable');assert.equal(a.enrichment.gmgn.status,'unavailable');assert.ok(a.gaps.some(g=>g.includes('simulation provider unavailable')));a.market.primary.price=777;assert.equal(b.market.primary.price,1);assert.equal((await api.snapshot({chain:'base',address,pool:pair})).market.primary.price,1);
+console.log('PASS nested-window consistency, false-signal suppression, Radar/history/paper-entry gates, preserved independent exit evidence, GMGN immutable coalescing/dated retention/expiry/cooldown, optional-provider isolation and project-cache mutation isolation. Synthetic data only.');

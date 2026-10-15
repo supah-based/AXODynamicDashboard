@@ -1,6 +1,6 @@
 {
   "name": "axo-local-research-dashboard",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.7",
@@ -42,7 +42,8 @@
     "test:data-flow": "node work/test-data-flow.mjs && node work/test-project-data.mjs && node work/test-project-links.mjs",
     "test:discovery-memory": "node work/test-discovery-memory-browser.mjs",
     "test:intel-upgrades": "node work/test-intel-upgrades.mjs && node work/test-queue-cache.mjs && node work/test-durable-store.mjs",
-    "test:radar": "node work/test-radar-flow.mjs && node work/test-public-ribbon.mjs && node work/test-radar-modes-browser.mjs && node work/test-global-ribbon-browser.mjs"
+    "test:radar": "node work/test-radar-flow.mjs && node work/test-public-ribbon.mjs && node work/test-radar-modes-browser.mjs && node work/test-global-ribbon-browser.mjs",
+    "test:evidence-integrity": "node work/test-evidence-integrity.mjs && node work/test-project-data.mjs && node work/test-trade-research.mjs && node work/test-evidence-loading-browser.mjs && node work/test-data-brief-browser.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

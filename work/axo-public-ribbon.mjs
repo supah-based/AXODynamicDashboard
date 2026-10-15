@@ -2,11 +2,12 @@
 import Visual from './axo-visual-model.cjs';
 import Stablecoins from './axo-stablecoins.cjs';
 import Risk from './axo-risk-policy.cjs';
+import MarketIntel from './axo-market-intel.cjs';
 const chains=['solana','base','bsc','ethereum','robinhood','arc'];
 const fields=['id','chain','address','pair','name','symbol','price','marketCap','fdv','liquidity','volume1','volume6','volume24','change1','change24','createdAt','tokenCreatedAt','seenAt','provider','observationStatus','url','imageUrl','holders','holdersObservedAt','holdersSource'];
 function publicRow(p,d){const out=Object.fromEntries(fields.flatMap(k=>{const v=p[k];return typeof v==='string'?[[k,v.slice(0,300)]]:typeof v==='number'&&Number.isFinite(v)?[[k,v]]:v===null?[[k,null]]:[]}));out.id=out.id||Visual.identity(p);out.changes=Object.fromEntries(['h1','h24'].map(k=>[k,Number.isFinite(p.changes?.[k])?p.changes[k]:null]));if(Array.isArray(p.holderHistory))out.holderHistory=p.holderHistory.slice(-32).filter(r=>(!r.chain||r.chain===p.chain)&&(!r.address||Risk.eq(r.address,p.address,p.chain))).map(r=>({chain:p.chain,address:p.address,at:r.at,count:r.count,source:typeof r.source==='string'?r.source.slice(0,80):null}));if(d?.chain===p.chain&&Risk.eq(d.address,p.address,p.chain)&&d.source==='GoPlus')out.sharedSecurity={status:d.status,chain:d.chain,address:d.address,receivedAt:d.receivedAt,source:d.source,holderCount:d.holderCount,checks:(d.checks||[]).slice(0,20).map(c=>({key:c.key,label:c.label,value:['0','1'].includes(c.value)?c.value:null}))};return out;}
 export function publicRibbon({pools=[],risk=()=>null,now=Date.now()}={}){
- const stats={observations:0,invalid:0,assets:0,stale:0,liquidity:0,screening:0,volume:0,eligible:0,duplicates:0},latestPools=new Map(),unique=new Map();
+ const stats={observations:0,invalid:0,assets:0,stale:0,liquidity:0,screening:0,volume:0,eligible:0,duplicates:0,inconsistent:0},latestPools=new Map(),unique=new Map();
  for(const p of pools.slice(0,2000)){
   stats.observations++;const id=Visual.identity(p),ttl=p?.provider==='GeckoTerminal'?900000:180000;
   if(!id||!chains.includes(p.chain)){stats.invalid++;continue;}
@@ -16,6 +17,7 @@ export function publicRibbon({pools=[],risk=()=>null,now=Date.now()}={}){
   if(!old||p.seenAt>old.seenAt||p.seenAt===old.seenAt&&p.liquidity>old.liquidity)latestPools.set(id,p);
  }
  for(const [id,p] of latestPools){
+  if(MarketIntel.integrity(p).issues.length){stats.inconsistent++;continue;}
   if(!Number.isFinite(p.liquidity)||p.liquidity<50000){stats.liquidity++;continue;}
   const d=risk(p);if(Risk.evaluate(p,d,now).status!=='screened'){stats.screening++;continue;}
   if(!(Number.isFinite(p.volume1)&&p.volume1>=1000)&&!(Number.isFinite(p.volume24)&&p.volume24>=10000)){stats.volume++;continue;}

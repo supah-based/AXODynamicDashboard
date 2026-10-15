@@ -8,7 +8,7 @@ const row=(i,extra={})=>({id:'radar-fixture-'+i,chain:'base',address:addr(i),pai
 const risk=p=>({chain:p.chain,address:p.address,status:'available',source:'GoPlus',receivedAt:now,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0'}))});
 let r=publicRibbon({pools:[row(1),row(2)],risk,now});
 assert.deepEqual(r.modes.h1.projects.map(p=>p.symbol),['F2','F1']);assert.deepEqual(r.modes.h24.projects.map(p=>p.symbol),['F1','F2']);assert.equal(r.modes.h1.projects[0].change1,-2);assert.deepEqual(r.projects,r.modes.h24.projects);
-r=publicRibbon({pools:[row(1,{volume24:100,volume1:1500}),row(2,{volume1:null})],risk,now});assert.deepEqual(r.modes.h1.projects.map(p=>p.symbol),['F1']);assert.deepEqual(r.modes.h24.projects.map(p=>p.symbol),['F2']);
+r=publicRibbon({pools:[row(1,{volume24:5000,volume1:1500}),row(2,{volume1:null})],risk,now});assert.deepEqual(r.modes.h1.projects.map(p=>p.symbol),['F1']);assert.deepEqual(r.modes.h24.projects.map(p=>p.symbol),['F2']);
 assert.equal(publicRibbon({pools:[row(1)],risk:()=>null,now}).modes.h1.projects.length,0);
 for(const extra of [{liquidity:100},{volume1:0,volume24:0},{liquidity:null}])assert.equal(publicRibbon({pools:[row(1,{seenAt:now-60000}),row(1,extra)],risk,now}).projects.length,0,'An older good snapshot cannot conceal the newest failing liquidity/volume evidence');
 const perWindow=publicRibbon({pools:[row(1,{volume1:null}),row(1,{pair:addr(990),liquidity:90000,volume1:1500,volume24:null})],risk,now});assert.equal(perWindow.modes.h1.projects[0].pair,addr(990));assert.equal(perWindow.modes.h24.projects[0].pair,addr(101));

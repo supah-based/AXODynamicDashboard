@@ -1,5 +1,6 @@
 import Stream from './axo-stream-schema.cjs';
 import Risk from './axo-risk-policy.cjs';
+import MarketIntel from './axo-market-intel.cjs';
 import {responseJson} from './axo-http-json.mjs';
 
 // This uses only the existing public exact-project API. It is not private DB access.
@@ -11,7 +12,7 @@ export function createKnowledgeBridge({origin=null,fetchImpl=fetch,now=Date.now}
   if(raw?.schemaVersion!==2||raw.project?.chain!==identity.chain||!Risk.eq(raw.project.address,identity.address,identity.chain))throw Error('Shared project schema or identity mismatch');
   const p=raw.market?.primary;if(!p||p.chain!==identity.chain||!Risk.eq(p.address,identity.address,identity.chain)||!Risk.eq(p.pair,identity.pool,identity.chain))throw Error('Exact shared pool unavailable');
   if(!Number.isFinite(p.seenAt)||p.seenAt<=0||p.seenAt>now()||now()-p.seenAt>300000||p.observationStatus==='stale')throw Error('Shared observation stale or future-dated');
-  const out={chain:p.chain,address:p.address,pair:p.pair,seenAt:p.seenAt,sharedSource:origin};
+  const out={...(MarketIntel.integrity(p).issues.length?{activityIntegrity:{status:'inconsistent'}}:{}),chain:p.chain,address:p.address,pair:p.pair,seenAt:p.seenAt,sharedSource:origin};
   for(const k of ['name','symbol','provider','id'])if(typeof p[k]==='string')out[k]=p[k].slice(0,120);
   for(const k of ['price','liquidity','marketCap','volume5','volume1','volume6','volume24','buys','sells','createdAt'])out[k]=Number.isFinite(p[k])&&p[k]>=0?p[k]:null;
   for(const k of ['change1','change24'])out[k]=Number.isFinite(p[k])?p[k]:null;
