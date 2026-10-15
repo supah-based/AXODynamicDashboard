@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {Readable} from 'node:stream';
+import Intel from './axo-market-intel.cjs';
+import {mergePools} from './axo-project-data.mjs';
+import {createDiscoveryMemory} from './axo-discovery-memory.mjs';
+import {createCandidateFeed} from './axo-candidate-feed.mjs';
+import {createGmgnData,normalizeGmgn} from './axo-gmgn-data.mjs';
+import {createPublicPageResearch,projectPage,normalizePageReport} from './axo-public-page-research.mjs';
+
+let now=1792050000000;
+const address='0x'+'1'.repeat(40),pair='0x'+'2'.repeat(40),other='0x'+'3'.repeat(40);
+const p={id:'base:'+pair,chain:'base',address,pair,name:'Test only',symbol:'FIX',seenAt:now,price:1,liquidity:100000,marketCap:200000,volume5:1000,volume1:6500,volume24:30000,transactions:{m5:{buys:15,sells:5}},createdAt:now-86400000};
+const safe={chain:'base',address,status:'available',source:'GoPlus',receivedAt:now,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0'}))};
+assert.equal(Intel.brief(p,{risk:{status:'screened'},now}).metrics.pace5toPrior55,2);
+assert.equal(Intel.brief(p,{risk:{status:'screened'},now}).state,'investigate');
+assert.equal(Intel.brief({...p,transactions:{m5:{buys:1,sells:1}}},{risk:{status:'screened'},now}).state,'observe');
+assert.equal(Intel.brief({...p,volume1:1000},{now}).metrics.pace5toPrior55,null);
+assert.equal(Intel.brief({...p,seenAt:now+1},{risk:{status:'screened'},now}).state,'check-data');
+assert.equal(Intel.brief(p,{risk:{status:'screened'},now,external:{status:'available',chain:'base',address:other,receivedAt:now,top10Rate:.9}}).cautions.length,0);
+const merged=mergePools([{provider:'Preferred but old',priority:1,rows:[{...p,seenAt:now-180000,price:100,marketCap:999}]},{provider:'New',priority:2,rows:[{...p,marketCap:null}]}],now)[0];
+assert.equal(merged.price,1);assert.equal(merged.marketCap,null);assert.equal(merged.dataQuality.status,'current');
+const conflicting=mergePools([{provider:'A',priority:1,rows:[p]},{provider:'B',priority:2,rows:[{...p,price:2}]}],now)[0];assert.equal(conflicting.dataQuality.status,'conflict');
+assert.equal(mergePools([{provider:'Future',priority:1,rows:[{...p,seenAt:now+1}]}],now).length,0);
+
+const tmp=await fs.mkdtemp(path.resolve('work/test-discovery-cache-')),file=path.join(tmp,'memory.json');
+let risk=safe;const memory=createDiscoveryMemory({file,risk:()=>risk,now:()=>now});await memory.ingest([p]);await memory.flush();
+assert.equal(memory.snapshot().projects.length,1);
+const restarted=createDiscoveryMemory({file,risk:()=>risk,now:()=>now});await restarted.ready();assert.equal(restarted.snapshot().projects[0].seenAt,p.seenAt);
+await restarted.ingest([{...p,seenAt:p.seenAt-1,price:500,liquidity:999999}]);assert.equal(restarted.snapshot().projects[0].price,1);
+await restarted.ingest([],{status:'available',asOf:now,rows:[{identity:{chain:'base',address},status:'available',contributors:2,interestWeight:100,observedAt:now}]});assert.equal(restarted.snapshot().projects[0].discoveryMemory.communityBonus,0);
+await restarted.ingest([],{status:'available',asOf:now,rows:[{identity:{chain:'base',address},status:'available',contributors:5,interestWeight:100,observedAt:now}]});assert.equal(restarted.snapshot().projects[0].discoveryMemory.communityBonus,8);
+risk={...safe,checks:[{key:'is_honeypot',value:'1'}]};assert.equal(restarted.snapshot().retained,0);risk=safe;await restarted.ingest([p]);
+now+=16*60000;assert.equal(restarted.snapshot().projects.length,0);assert.equal(restarted.snapshot().remembered.length,1);assert.equal(restarted.snapshot().remembered[0].seenAt,p.seenAt);assert.equal(restarted.snapshot().remembered[0].discoveryMemory.opportunity,false);assert.equal(restarted.snapshot().community,'unavailable');
+now+=8*86400000;assert.equal(restarted.snapshot().retained,0);
+now=p.seenAt;
+const apiRaw={chainId:'base',pairAddress:pair,baseToken:{address,name:'Fixture',symbol:'FIX'},priceUsd:'1',liquidity:{usd:100000},volume:{h1:6000,h24:30000},pairCreatedAt:now-30*86400000};
+let fetches=0,outage=false;const feed=createCandidateFeed({now:()=>now,source:{get:async url=>{fetches++;if(outage)throw Error('Outage');if(url.includes('/tokens/v1/'))return {at:now,data:[apiRaw,{...apiRaw,baseToken:{address:other}}]};return {at:now,data:[{chainId:'base',tokenAddress:address}]};}}});
+const [f1,f2]=await Promise.all([feed.collect(),feed.collect()]);assert.equal(fetches,4);assert.equal(f1.items.length,1);assert.equal(f1,f2);assert.equal(f1.items[0].discoveryReasons.length,3);outage=true;now+=60000;assert.equal((await feed.collect()).coverageStatus,'partial');now+=16*60000;await assert.rejects(()=>feed.collect());now=p.seenAt;
+
+assert.equal((await createGmgnData().info(p)).status,'not_configured');
+assert.throws(()=>normalizeGmgn({code:0,data:{address:other}},p,now));
+let gmCalls=0;const gm=createGmgnData({apiKey:()=> 'fixture-key-not-a-secret',now:()=>now,fetchImpl:async(url,options)=>{gmCalls++;assert.equal(new URL(url).pathname,'/v1/token/info');assert.equal(options.method,'GET');assert.equal(options.headers['X-APIKEY'],'fixture-key-not-a-secret');return new Response(JSON.stringify({code:0,data:{address,holder_count:100,price:{price:'1'},stat:{top_10_holder_rate:.3},wallet_tags_stat:{smart_wallets:4},private_wallet_list:['must not be exposed']}}));}});
+const [g1,g2]=await Promise.all([gm.info(p),gm.info(p)]);assert.equal(gmCalls,1);assert.equal(g1.holderCount,100);assert.equal(g2.observedAt,null);assert.equal(JSON.stringify(g1).includes('must not be exposed'),false);assert.equal((await gm.info({...p,chain:'arc'})).status,'unsupported');
+let limitedCalls=0;const limited=createGmgnData({apiKey:()=> 'fixture',now:()=>now,fetchImpl:async()=>{limitedCalls++;return new Response('{}',{status:429,headers:{'retry-after':'120'}});}});assert.equal((await limited.info(p)).status,'rate_limited');assert.equal((await limited.info({...p,address:other})).status,'waiting');assert.equal(limitedCalls,1);
+
+const identity={chain:'base',address,pool:pair},url=projectPage(identity);assert.match(url,/gmgn.ai\/base\/token/);assert.throws(()=>projectPage(identity,'http://127.0.0.1/'+address));assert.throws(()=>projectPage(identity,'https://gmgn.ai/base/token/'+other));assert.throws(()=>projectPage(identity,'https://gmgn.ai/base/token/'+address+'?key=private'));
+let captures=0,models=0;const page=createPublicPageResearch({now:()=>now,capture:async()=>{captures++;return {status:'access_gap'};},model:async()=>{models++;throw Error();}});await Promise.all([page.research(identity),page.research(identity)]);assert.equal(captures,1);assert.equal(models,0);assert.equal(page.view(identity).status,'access_gap');now+=120001;assert.equal(page.view(identity).status,'not_checked');now=p.seenAt;
+const normalized=normalizePageReport({summary:'Fixture',figures:[{label:'Holders',value:'100',quote:'Holders 100',basis:'text'},{label:'Made up',value:'999',quote:'999',basis:'text'},{label:'Image figure',value:'200',basis:'image'}],chart:{readable:true,observations:['Never promote static image to chart']},gaps:[]},{url,text:'Holders 100',image:'fixture',kind:'public-share-image'},identity,now);assert.equal(normalized.figures.length,2);assert.equal(normalized.chart.readable,false);assert.equal(normalized.chart.observations.length,0);assert.match(normalized.figures[1].basis,/unverified/);
+let unauthorizedCaptures=0;const denied=createPublicPageResearch({capture:async()=>{unauthorizedCaptures++;},model:async()=>{throw Error();}}),req=Readable.from([JSON.stringify(identity)]);req.method='POST';req.headers={host:'127.0.0.1:43187',origin:'http://127.0.0.1:43187','x-axo-request':'1'};const res={writeHead(code){this.code=code;},end(body){this.body=JSON.parse(body);}};await denied.handle(req,res,new URL('http://127.0.0.1:43187/api/public-page-research'));assert.equal(res.code,401);assert.equal(unauthorizedCaptures,0);
+let active=0,maxActive=0,release;const gate=new Promise(r=>release=r),serial=createPublicPageResearch({now:()=>now,capture:async(i,url)=>{active++;maxActive=Math.max(maxActive,active);await gate;active--;return {status:'captured',url,text:'Holders 100',image:'data:image/png;base64,Zml4dHVyZQ=='};},model:async args=>{assert.equal(args.images.length,1);return {value:{summary:'Observed',figures:[{label:'Holders',value:'100',quote:'Holders 100',basis:'text'}],chart:{readable:false,observations:[]},gaps:[]}};}});
+const tasks=[0,1,2,3].map(i=>serial.research({...identity,address:'0x'+String(i+5).repeat(40)}));await assert.rejects(()=>serial.research({...identity,address:other}),/full/);release();await Promise.all(tasks);assert.equal(maxActive,1);assert.equal(serial.status().active,0);
+const bounded=createDiscoveryMemory({now:()=>now});await bounded.ingest([...Array.from({length:160},(_,i)=>({...p,address:'0x'+(i+100).toString(16).padStart(40,'0'),pair:'0x'+(i+1000).toString(16).padStart(40,'0'),seenAt:now})),{...p,chain:'arc',address:other,seenAt:now}]);assert.equal(bounded.snapshot().retained,120);assert.ok(bounded.snapshot().projects.some(p=>p.chain==='arc'));
+let dbRecord=null;const fakeStore={enabled:true,get:async()=>dbRecord,put:async(kind,key,args)=>{dbRecord={data:structuredClone(args.data)};return true;}};const dbMemory=createDiscoveryMemory({store:fakeStore,now:()=>now});await dbMemory.ingest([{...p,wallet:'private must not be retained',portfolio:{secret:1},seenAt:now}]);await dbMemory.flush();assert.equal(JSON.stringify(dbRecord).includes('private must not'),false);const dbRestart=createDiscoveryMemory({store:fakeStore,now:()=>now});await dbRestart.ready();assert.equal(dbRestart.snapshot().projects.length,1);assert.equal(dbRestart.snapshot().storage,'database');
+let communityReads=0;const extra=createDiscoveryMemory({now:()=>now});await extra.collectCommunity({status:'available',asOf:now,rows:[{status:'available',identity:{chain:'base',address},contributors:2,observedAt:now}]},async()=>{communityReads++;return p;});assert.equal(communityReads,0);now+=60001;await extra.collectCommunity({status:'available',asOf:now,rows:[{status:'available',identity:{chain:'base',address},contributors:4,observedAt:now,interestWeight:3}]},async()=>{communityReads++;return {...p,seenAt:now};});assert.equal(communityReads,1);assert.equal(extra.snapshot().projects.length,1);
+await memory.flush();await restarted.flush();await fs.rm(tmp,{recursive:true,force:true});
+console.log('PASS: retained Discovery survives restart, preserves timestamps and excludes severe risk; cohort privacy/capped ranking, history expiry, batched exact discovery, atomic fresh market merge, activity math, GMGN read-only/coalescing/rate limits, and public-page provenance/access gaps.');

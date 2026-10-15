@@ -1,7 +1,7 @@
 # AXO Streams — Builder AI Handoff
 
-Updated: 2026-10-14
-Current additive release tasks: see [OpenClaw 0.3.6 focused decisions and paper-strategy handoff](docs/OPENCLAW_RELEASE_0.3.6.md), extending [0.3.5 continuous intelligence](docs/OPENCLAW_RELEASE_0.3.5.md) and the [0.3.0 release](docs/OPENCLAW_RELEASE_0.3.0.md). Preserve this handoff's existing wallet/Hatchery requirements. The prior progression table is migration 006; 0.3.6 adds no migration. Signed coordination transport and a bounded public project read have been verified; live private shared-knowledge access and deployment acceptance remain operator tasks.
+Updated: 2026-10-15
+Current additive release tasks: see [OpenClaw 0.3.7 retained Discovery and source-grounded activity](docs/OPENCLAW_RELEASE_0.3.7.md), extending [OpenClaw 0.3.6 focused decisions and paper-strategy handoff](docs/OPENCLAW_RELEASE_0.3.6.md), extending [0.3.5 continuous intelligence](docs/OPENCLAW_RELEASE_0.3.5.md) and the [0.3.0 release](docs/OPENCLAW_RELEASE_0.3.0.md). Preserve this handoff's existing wallet/Hatchery requirements. The prior progression table is migration 006; 0.3.6 and 0.3.7 add no migration. Signed coordination transport and a bounded public project read have been verified; live private shared-knowledge access and deployment acceptance remain operator tasks.
 Repository: `supah-based/AXODynamicDashboard`
 Production: `https://streams.axo.vision`
 Verified baseline commit: `931a802d6bed162a5311da56625e306380c24bcc`
