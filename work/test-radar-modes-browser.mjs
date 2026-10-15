@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {runtimeDependency} from './axo-runtime.mjs';
+import {publicRibbon} from './axo-public-ribbon.mjs';
+const {chromium}=runtimeDependency('playwright'),browser=await chromium.launch({channel:process.env.AXO_BROWSER_CHANNEL||'chrome',headless:true});
+const now=Date.now(),addr=i=>'0x'+i.toString(16).padStart(40,'0'),pools=[1,2].map(i=>({id:'radar-'+i,chain:'base',address:addr(i),pair:addr(i+100),name:'Test project '+i,symbol:'F'+i,seenAt:now,provider:'DEX Screener',price:1,liquidity:100000,volume1:i*2000,volume24:100000-i*10000,change1:-i,change24:i}));
+const risk=p=>({chain:p.chain,address:p.address,status:'available',source:'GoPlus',receivedAt:now,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0'}))});
+const data=await fetch('http://127.0.0.1:43187/api/dashboard').then(r=>r.json());data.projectRibbon=publicRibbon({pools,risk,now});
+const context=await browser.newContext(),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.route('**/api/dashboard',r=>r.fulfill({json:data}));await page.route('**/api/ai/**',r=>r.fulfill({status:503,json:{error:'No model calls in Radar fixture test'}}));await page.route('**/api/discovery/control',r=>r.fulfill({json:{enabled:false,jobs:[],results:{},alerts:[]}}));
+try{
+ await page.goto('http://127.0.0.1:43187/?view=compact-intel',{waitUntil:'domcontentloaded'});await page.waitForSelector('[data-ribbon-primary]');
+ const first=()=>page.locator('[data-ribbon-primary] .axo-ribbon-project').first();assert.match(await first().innerText(),/Test project 1/);
+ await page.locator('[data-ribbon-window="h1"]').click();assert.match(await first().innerText(),/Test project 2/);assert.match(await first().getAttribute('aria-label'),/-2\.0% 1h/);assert.equal(await first().locator('.axo-ribbon-change').getAttribute('class'),'axo-ribbon-change down');
+ await page.evaluate(()=>{window.radarNode=document.querySelector('.axo-ribbon-run');axoGoStream({type:'discovery'});});assert.equal(await page.evaluate(()=>radarNode===document.querySelector('.axo-ribbon-run')),true);
+ await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('[data-ribbon-primary]');assert.equal(await page.locator('[data-ribbon-window="h1"]').getAttribute('aria-pressed'),'true');assert.match(await first().innerText(),/Test project 2/);
+ for(const theme of ['dark','light'])for(const width of [1440,390,320]){await page.setViewportSize({width,height:900});await page.evaluate(t=>{document.documentElement.dataset.theme=t;},theme);const fit=await page.locator('.axo-discovery-ribbon').evaluate(e=>({height:e.offsetHeight,overflow:document.documentElement.scrollWidth>innerWidth,controls:[...e.querySelectorAll('[data-ribbon-window]')].map(b=>({w:b.getBoundingClientRect().width,right:b.getBoundingClientRect().right}))}));assert.equal(fit.height,28);assert.equal(fit.overflow,false);assert.ok(fit.controls.every(c=>c.w>=20&&c.right<width));}
+ await page.emulateMedia({reducedMotion:'reduce'});await page.locator('[data-ribbon-window="h24"]').click();assert.match(await first().innerText(),/Test project 1/);assert.equal(await page.locator('.axo-ribbon-run').evaluate(e=>getComputedStyle(e).animationName),'none');
+ await page.evaluate(()=>{snapshot.projectRibbon.diagnostics.stale++;window.retainedRadar=document.querySelector('.axo-ribbon-run');axoRibbonRender(true);});assert.equal(await page.evaluate(()=>retainedRadar===document.querySelector('.axo-ribbon-run')),true,'Diagnostic-only updates do not restart scrolling');
+ await page.evaluate(()=>{snapshot.projectRibbon.modes.h24.projects=[];snapshot.projectRibbon.modes.h24.status='awaiting_fresh_data';axoRibbonRender(true);});assert.match(await page.locator('.axo-ribbon-empty').innerText(),/Refreshing dated/);assert.equal(await page.locator('[data-ribbon-window]').count(),2);assert.match(await page.locator('.axo-ribbon-empty').getAttribute('title'),/dated.*checks/);
+ await page.locator('[data-ribbon-window="h1"]').click();assert.match(await first().innerText(),/Test project 2/);await page.screenshot({path:'work/radar-modes-preview.png'});assert.deepEqual(errors,[]);
+ console.log('PASS Radar 1h/24h ranking, signs, selected mode persistence, stream-independent DOM, diagnostic update continuity, 28px layout at 1440/390/320 in both themes, reduced motion and recoverable empty state.');
+}finally{await browser.close();}
