@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const h=createRequire(import.meta.url)('./axo-discovery-filters.cjs');
+for(const [text,value]of [['',null],[' 50k ',50000],['$1.25m',1250000],['100,000',100000],['1,234.5k',1234500],['0',0],['.5',.5],['2e4',20000],['2.5b',2500000000]])assert.deepEqual(h.parse(text),{valid:true,value},text);
+for(const text of ['-1','NaN','Infinity','50x','12,50','1,00,000','1e999','1000000000000001'])assert.equal(h.parse(text).valid,false,text);
+assert.equal(h.parse('101',100).valid,false);assert.equal(h.parse('100',100).valid,true);
+for(const value of [0,.5,1000,12500,100000,123456.789,1e9])assert.equal(h.parse(h.format(value)).value,value);
+assert.equal(h.validate({mcMin:100,mcMax:99})[0].keys.length,2);assert.equal(h.validate({scoreMin:101}).length,1);assert.equal(h.validate({volMin:-1}).length,1);assert.equal(h.validate({liqMin:Infinity}).length,1);assert.equal(h.validate({mcMin:0,mcMax:0,scoreMin:0,scoreMax:100}).length,0);
+assert.deepEqual(h.chips({liqMin:1000}),[]);assert.deepEqual(h.chips({mcMin:50000,liqMin:0,website:true}).map(c=>c.key),['mcMin','liqMin','website']);
+console.log('PASS amount suffixes, grouping, exact format round trips, invalid amounts, inclusive ranges, score bounds and removable nondefault chips.');
