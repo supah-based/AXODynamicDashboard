@@ -1,6 +1,6 @@
 /* Personal follows are exact contract identities, never positions or shared votes. */
 const watchIdentity=p=>p?.chain+':'+(p?.chain==='solana'?p.address:p?.address?.toLowerCase());
-const watchRows=()=>axoWatch.filter(p=>!axoStream.chain||p.chain===axoStream.chain);
+const watchRows=()=>axoWatch.filter(p=>(!axoStream.chain||p.chain===axoStream.chain)&&(!window.axoWatchViewMatches||window.axoWatchViewMatches(p)));
 const watchTitleBase=axoStreamTitle;axoStreamTitle=function(s=axoStream){return s.type==='watchlist'?'Your Watchlist'+(s.chain?' · '+s.chain:''):watchTitleBase(s)};
 const watchVisibleBase=axoStreamCardVisible;axoStreamCardVisible=function(id){if(axoStream.type!=='watchlist')return watchVisibleBase(id);if(id.startsWith('stream-data-social-'))return true;if(id.startsWith('stream-data-watch-'))return true;const p=axoProjectMap.get(id);return !!p&&watchRows().some(w=>watchIdentity(w)===watchIdentity(p))};
 const watchMatchBase=axoStreamMatch;axoStreamMatch=function(p){return axoStream.type==='watchlist'?watchRows().some(w=>watchIdentity(w)===watchIdentity(p)):watchMatchBase(p)};
