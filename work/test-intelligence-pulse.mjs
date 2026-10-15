@@ -7,7 +7,7 @@ import {createIntelligencePulse} from './axo-intelligence-pulse.mjs';
 import {createSecurityApi} from './axo-security-api.mjs';
 import {publicRibbon} from './axo-public-ribbon.mjs';
 
-let now=1792010000000;const address=i=>'0x'+i.toString(16).padStart(40,'0'),pool=i=>({id:'pulse-'+i,chain:'base',address:address(i),pair:address(i+100),name:'Fixture '+i,symbol:'FIX'+i,seenAt:now,createdAt:now-3600000,liquidity:100000,volume24:100000,volume1:10000,price:1,marketCap:1000000,privateWallet:'NEVER_PUBLIC',preferences:{secret:'NEVER_PUBLIC'}}),clean=p=>({chain:p.chain,address:p.address,source:'GoPlus',sourceUrl:'https://api.gopluslabs.io/',status:'available',receivedAt:now,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0',label:key}))});
+let now=1792010000000;const address=i=>'0x'+i.toString(16).padStart(40,'0'),pool=i=>({id:'pulse-'+i,chain:'base',address:address(i),pair:address(i+100),name:'Fixture '+i,symbol:'FIX'+i,provider:'Fixture provider',seenAt:now,createdAt:now-3600000,liquidity:100000,volume24:100000,volume1:10000,price:1,marketCap:1000000,privateWallet:'NEVER_PUBLIC',preferences:{secret:'NEVER_PUBLIC'}}),clean=p=>({chain:p.chain,address:p.address,source:'GoPlus',sourceUrl:'https://api.gopluslabs.io/',status:'available',receivedAt:now,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0',label:key}))});
 assert.equal(Risk.evaluate(pool(1),{...clean(pool(1)),checks:[{key:'is_honeypot',value:'0'}]},now).status,'unknown','One passed flag cannot count as core screening');
 assert.equal(Risk.evaluate(pool(1),clean(pool(1)),now).status,'screened');
 assert.equal(Risk.evaluate(pool(1),{...clean(pool(1)),receivedAt:now+1},now).status,'unknown');

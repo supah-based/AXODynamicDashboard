@@ -8,7 +8,7 @@
   const latest=new Map();for(const e of snapshot.intelligence?.events||[])latest.set(identity(e.project),e);
   const watched=new Set((axoWatch||[]).map(identity)),items=[];
   for(const [key,e]of latest){
-   const p=e.project,r=axoRiskState(p),setup=(axoVenueData?.setups||[]).find(s=>s.identity?.chain===p.chain&&AxoRiskPolicy.eq(s.identity.address,p.address,p.chain)&&AxoRiskPolicy.eq(s.identity.pool,p.pair||p.pool,p.chain));
+   const p=snapshot.intelligence?.items?.find(x=>identity(x.project)===key&&AxoRiskPolicy.eq(x.project.pair,e.project.pair,e.project.chain))?.project||e.project,r=axoRiskState(p),setup=(axoVenueData?.setups||[]).find(s=>s.identity?.chain===p.chain&&AxoRiskPolicy.eq(s.identity.address,p.address,p.chain)&&AxoRiskPolicy.eq(s.identity.pool,p.pair||p.pool,p.chain));
    const setupFresh=setup&&Number.isFinite(setup.at)&&setup.at>0&&setup.at<=Date.now()&&Date.now()-setup.at<=120000;
    const relevant=watched.has(key),severe=r.excluded,type=severe?'Risk warning':e.type==='liquidity'?'Liquidity change':setupFresh&&setup.eligible?'Paper setup qualifies':relevant?'On your watchlist':e.type==='risk'?'Contract check updated':'New evidence';
    const rank=(severe?100:e.type==='liquidity'?90:setupFresh&&setup.eligible?65:20)+(relevant?25:0)+(r.status==='screened'?10:0)+(p.liquidity>=100000?5:0)+Math.min(10,Math.log10(1+Math.max(0,p.volume1||0)));

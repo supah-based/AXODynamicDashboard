@@ -5,13 +5,15 @@ import Assets from './axo-stablecoins.cjs';
 import {paperKey} from './axo-paper.mjs';
 
 const priorities={position:100,interactive:60,signal:40,discovery:10};
-export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk=null,getSimulation,getRebound=()=>null,venues,now=Date.now,getCandidates=()=>[],getPositions=async()=>[],autoStart=false,perMinute=6,maxQueued=64,waitMs=1200}={}){
+export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk=null,getCurrentProgression=null,getSimulation,getRebound=()=>null,venues,now=Date.now,getCandidates=()=>[],getPositions=async()=>[],autoStart=false,perMinute=6,maxQueued=64,waitMs=1200}={}){
  const cache=new Map(),jobs=new Map(),calls=[];let active=0,wake=null,stopped=false,sweeping=false,lastChain='',timer=null;
  const metrics={completed:0,failed:0,coalesced:0,expired:0,queueFull:0,displaced:0};
  const currentInputs=(p,inputs)=>getCachedRisk?{...inputs,risk:getCachedRisk(p)}:inputs;
  const diagnostic=(identity,reason,status='queued')=>({at:now(),identity,eligible:false,status,technical:{status:'unknown',reason},entry:{status:'unknown'},execution:{status:'unknown'},gaps:[reason]});
  function evaluate(c,p,config){
-  const market={...c.inputs.p,...Object.fromEntries(['price','liquidity','marketCap','volume1','volume24','buys','sells'].filter(k=>p?.[k]!==undefined).map(k=>[k,p[k]])),seenAt:p?.observedAt??p?.seenAt??c.inputs.p.seenAt};
+  const market={...c.inputs.p,...Object.fromEntries(['price','liquidity','marketCap','volume1','volume24','buys','sells','provider'].filter(k=>p?.[k]!==undefined).map(k=>[k,p[k]])),seenAt:p?.observedAt??p?.seenAt??c.inputs.p.seenAt};
+  const sameProvider=!p?.provider||p.provider===c.inputs.p.provider;market.participationObservedAt=(p?.buys!==undefined&&p?.sells!==undefined)?market.seenAt:sameProvider?c.inputs.p.seenAt:null;if(!sameProvider&&p?.buys===undefined){market.buys=null;market.sells=null;market.transactions=null;}if(market.seenAt!==c.inputs.p.seenAt||!sameProvider){market.volume5=p?.volume5??null;market.providerObservations=p?.providerObservations||[];}
+  market.progression=getCurrentProgression?getCurrentProgression(market):p?.progression||market.progression||null;
   return tradeSetup(market,currentInputs(market,c.inputs),config,now());
  }
  function local(p,config=null){const c=cache.get(paperKey(p));return c&&now()>=c.at&&now()-c.at<=300000?(c.inputs?evaluate(c,p,strategyConfig(config||c.config)):c.value):null;}

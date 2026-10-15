@@ -13,9 +13,11 @@ export function createKnowledgeBridge({origin=null,fetchImpl=fetch,now=Date.now}
   if(!Number.isFinite(p.seenAt)||p.seenAt<=0||p.seenAt>now()||now()-p.seenAt>300000||p.observationStatus==='stale')throw Error('Shared observation stale or future-dated');
   const out={chain:p.chain,address:p.address,pair:p.pair,seenAt:p.seenAt,sharedSource:origin};
   for(const k of ['name','symbol','provider','id'])if(typeof p[k]==='string')out[k]=p[k].slice(0,120);
-  for(const k of ['price','liquidity','marketCap','volume1','volume6','volume24','buys','sells','createdAt'])out[k]=Number.isFinite(p[k])&&p[k]>=0?p[k]:null;
+  for(const k of ['price','liquidity','marketCap','volume5','volume1','volume6','volume24','buys','sells','createdAt'])out[k]=Number.isFinite(p[k])&&p[k]>=0?p[k]:null;
   for(const k of ['change1','change24'])out[k]=Number.isFinite(p[k])?p[k]:null;
   for(const k of ['url','imageUrl'])try{const u=new URL(p[k]);if(u.protocol==='https:'&&!u.username&&!u.password)out[k]=u.href;}catch{}
+  out.transactions=Object.fromEntries(['m5','h1','h6','h24'].map(w=>[w,Object.fromEntries(['buys','sells'].map(k=>[k,Number.isSafeInteger(p.transactions?.[w]?.[k])&&p.transactions[w][k]>=0?p.transactions[w][k]:null]))]));
+  out.providerObservations=(Array.isArray(p.providerObservations)?p.providerObservations:[]).slice(0,4).filter(o=>typeof o.provider==='string'&&Number.isFinite(o.seenAt)&&o.seenAt>0&&o.seenAt<=now()&&now()-o.seenAt<=300000&&Number.isFinite(o.price)&&o.price>0).map(o=>({provider:o.provider.slice(0,100),seenAt:o.seenAt,price:o.price}));
   if(!(out.price>0)||!(out.liquidity>0)||!out.url)throw Error('Shared market data incomplete');
   return out;
  }
