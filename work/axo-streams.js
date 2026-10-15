@@ -37,7 +37,7 @@ const axoShortcutBar=document.createElement('nav');axoShortcutBar.className='axo
 function axoShortcutSignature(value){const s=axoNormalizeStream(value);s.filters.chains.sort();if(s.project&&s.project.chain!=='solana'){s.project.address=s.project.address.toLowerCase();s.project.pool=s.project.pool.toLowerCase()}return JSON.stringify(s)}
 function axoUpdateShortcutState(){
  const s=axoCaptureStream();
- for(const b of axoShortcutBar.querySelectorAll('[data-common-stream]')){const p=axoCommonStreams.find(p=>p.key===b.dataset.commonStream),active=p.key==='news'?['news','news-topic'].includes(s.type):s.type===p.type&&(!p.chain||s.chain===p.chain)&&(!p.id||s.id===p.id);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')}
+ for(const b of axoShortcutBar.querySelectorAll('[data-common-stream]')){const p=axoCommonStreams.find(p=>p.key===b.dataset.commonStream),active=p.key==='news'?['news','news-topic'].includes(s.type):s.type===p.type&&(!p.chain||s.chain===p.chain)&&(p.id?s.id===p.id:!s.id);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')}
  const signature=axoShortcutSignature(s),match=axoShortcuts.find(p=>axoShortcutSignature(p.stream)===signature);
  for(const b of axoShortcutBar.querySelectorAll('[data-stream-shortcut]')){if(b.dataset.streamShortcut===match?.id)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')}
 }
