@@ -1,3 +1,4 @@
+import {paperExecutionCosts} from './axo-paper-execution-policy.mjs';
 import {portfolioRisk,allocationRisk} from './axo-portfolio-risk.mjs';
 import {cohortPolicy,experimentId} from './axo-paper-evaluation.mjs';
 
@@ -20,8 +21,8 @@ export function sizePaperOpportunity({state,valuation,quote,setup,rank,config,no
  if(!finite(rank.score)||rank.score<0||rank.score>100)return blocked('Evidence conviction unavailable');
  const stopPct=Math.max(config.stopPct,setup.technical.atrPct*2);
  if(stopPct>25)return blocked('Volatility needs a stop wider than the 25% paper ceiling');
- const {buyTax,sellTax}=setup.execution||{};
- if(![buyTax,sellTax].every(v=>finite(v)&&v>=0&&v<100))return blocked('Dated buy/sell tax assumptions required');
+ const costs=paperExecutionCosts(setup.execution),buyTax=costs?.buyHaircutPct,sellTax=costs?.sellHaircutPct;
+ if(![buyTax,sellTax].every(v=>finite(v)&&v>=0&&v<100))return blocked('Dated supported execution-cost model required');
  const fee=config.feeBps/10000,slip=config.slippageBps/10000;
  // Net exit relative to entry debit includes both taxes, both fees and adverse slippage.
  const exitRatio=move=>(1+move)*(1-slip)/(1+slip)*(1-buyTax/100)*(1-sellTax/100)*(1-fee)/(1+fee);
@@ -35,6 +36,7 @@ export function sizePaperOpportunity({state,valuation,quote,setup,rank,config,no
  const equity=valuation.equityCents,categoryExposure=valuation.positions.filter(p=>!CATEGORY_POLICY[p.plan?.opportunity?.category]||p.plan.opportunity.category===category).reduce((n,p)=>n+p.marketValueCents,0);
  // Convert every capacity to notional cents. Final deterministic validation remains authoritative.
  const caps=[
+  ...(setup.execution?.kind==='bidirectional-quote-paper'?[['quote-backed paper pilot ceiling',10000]]:[]),
   ['planned stop risk',equity*riskBudgetBps/10000/lossFraction/(1+fee)],
   ['position ceiling',equity*state.config.maxPositionBps/10000],
   ['pool participation',quote.liquidity*100*state.config.maxParticipationBps/10000],
@@ -54,5 +56,5 @@ export function sizePaperOpportunity({state,valuation,quote,setup,rank,config,no
   if(debit-stopCredit<=equity*riskBudgetBps/10000&&debit<=state.cashCents-Math.ceil(equity*state.config.cashReserveBps/10000)&&!allocationRisk(risk,quote.chain,notional,feeCents)&&(categoryExposure+notional)/(equity-feeCents)*100<=policy.maxCategoryExposurePct)break;
  }
  const notionalCents=Math.floor(equity*bps/10000),debit=notionalCents+Math.ceil(notionalCents*fee);
- return {version:PAPER_SIZING_VERSION,allocationBps:bps,notionalCents,riskBudgetBps,plannedLossBps:bps?(debit-modeled(notionalCents,-stopPct/100))/equity*10000:0,stopPct,maxHoldingHours:policy.maxHoldingHours,categoryExposureLimitPct:policy.maxCategoryExposurePct,unknownCategoryExposureCharged:valuation.positions.some(p=>!CATEGORY_POLICY[p.plan?.opportunity?.category]),convictionMultiplier,policyMultiplier:adaptation.multiplier,adaptation,limits:caps.filter(([,v])=>v<=ceiling+1).map(([k])=>k),reason:bps?'Evidence-weighted stop-loss budget, bounded by remaining portfolio and pool capacity':'Available capacity is below one virtual dollar',assumptions:'Planned loss at the modeled stop, not a guaranteed maximum: gaps, failed sells, gas and MEV can exceed it.'};
+ return {version:PAPER_SIZING_VERSION,allocationBps:bps,notionalCents,riskBudgetBps,plannedLossBps:bps?(debit-modeled(notionalCents,-stopPct/100))/equity*10000:0,stopPct,maxHoldingHours:policy.maxHoldingHours,categoryExposureLimitPct:policy.maxCategoryExposurePct,unknownCategoryExposureCharged:valuation.positions.some(p=>!CATEGORY_POLICY[p.plan?.opportunity?.category]),convictionMultiplier,policyMultiplier:adaptation.multiplier,adaptation,limits:caps.filter(([,v])=>v<=ceiling+1).map(([k])=>k),reason:bps?'Evidence-weighted stop-loss budget, bounded by remaining portfolio and pool capacity':'Available capacity is below one virtual dollar',executionKind:setup.execution?.kind||'provider-pool-simulation',executionCosts:costs,assumptions:'Planned loss at the modeled stop, not a guaranteed maximum: gaps, failed sells, gas and MEV can exceed it.'};
 }

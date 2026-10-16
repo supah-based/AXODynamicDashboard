@@ -25,3 +25,15 @@ assert.equal(categories.local({...listed,credibleListing:{...listed.credibleList
 assert.equal(categoryHistoryReads,1,'Identity facts update without another history fetch');
 categories.stop();
 console.log('PASS cached technical setup category enrichment, explicit age/listing revocation, wrong-identity and future-dated listing rejection without extra history calls.');
+
+let routeClock=now,routeRequests=0;
+const routeIdentity={...identity,chain:'robinhood'},routeProject={...dated,...routeIdentity};
+const routeFailure=createTradeResearch({now:()=>routeClock,getProject:async()=>({...routeProject,seenAt:routeClock}),getHistory:async()=>({...history,...routeIdentity}),getRisk:async()=>null,getSimulation:async()=>{routeRequests++;return {...routeIdentity,kind:'bidirectional-quote-paper',status:'unavailable',source:'LI.FI',message:'Synthetic route coverage gap'};}});
+try{
+ await routeFailure.analyze(routeIdentity);
+ assert.equal(routeFailure.local(routeProject).execution.coverage,'unavailable','Unavailable quote evidence stays visible instead of disappearing immediately');
+ routeClock+=29999;await routeFailure.analyze(routeIdentity);assert.equal(routeRequests,1,'Bounded negative caching avoids re-requesting a known route gap every sweep');
+ routeClock++;assert.equal(routeFailure.local(routeProject),null,'Quote failure cache expires at thirty seconds');
+ await routeFailure.analyze(routeIdentity);assert.equal(routeRequests,2,'Expired failure evidence can refresh promptly');
+}finally{routeFailure.stop();}
+console.log('PASS quote-route failures retain visible coverage gaps with a thirty-second retry boundary.');

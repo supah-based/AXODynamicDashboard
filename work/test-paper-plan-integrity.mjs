@@ -6,7 +6,7 @@ import {sizePaperOpportunity} from './axo-paper-sizing.mjs';
 const initial=Date.parse('2026-10-16T12:00:00Z'),config=strategyConfig(),address=i=>'0x'+i.toString(16).padStart(40,'0');
 const quote=(i=1,at=initial)=>({key:'base:'+address(i)+':'+address(i+100),chain:'base',address:address(i),pool:address(i+100),symbol:'TEST'+i,price:1,liquidity:1000000,observedAt:at,evidenceId:'evidence-'+i,provider:'Synthetic',buyTax:7.8,sellTax:0});
 const state=newPaperState();state.config={...PAPER_DEFAULTS,...config};
-const q=quote(),setup={eligible:true,strategy:'momentum',technical:{atrPct:1},execution:{buyTax:q.buyTax,sellTax:q.sellTax}},rank={eligible:true,category:'swing',score:80};
+const q=quote(),setup={eligible:true,strategy:'momentum',technical:{atrPct:1},execution:{status:'simulated-route-observed',buyTax:q.buyTax,sellTax:q.sellTax}},rank={eligible:true,category:'swing',score:80};
 const sizing=sizePaperOpportunity({state,valuation:paperValuation(state,[q],initial),quote:q,setup,rank,config,now:initial});
 assert.ok(sizing.allocationBps>0,'Tax-bearing synthetic entry has room for a net first target');
 const proposal={action:'buy',assetKey:q.key,allocationBps:sizing.allocationBps,evidenceIds:[q.evidenceId],reason:'Synthetic plan-integrity fixture',opportunity:{version:'paper-opportunity-v1',chain:q.chain,category:'swing',strategy:'momentum',convictionScore:rank.score,sizing}};

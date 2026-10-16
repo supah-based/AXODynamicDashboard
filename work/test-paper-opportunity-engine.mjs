@@ -55,7 +55,7 @@ try{
  assert.ok(o.rows.filter(p=>['base','bsc'].includes(p.identity.chain)).every(p=>p.status==='ready'));
  assert.equal(o.unclassified.find(c=>c.chain==='base').observed,1);assert.ok(o.gaps.some(x=>x.includes('current five-minute')));
  assert.equal(o.coverage.find(c=>c.chain==='base'&&c.category==='swing').waiting,1,'Dated market rows remain represented in coverage waiting counts');
- assert.equal(o.executionCoverage.filter(c=>c.status==='unsupported').length,3);
+ assert.equal(o.executionCoverage.filter(c=>c.status==='paper-quote-supported').length,3);
  assert.ok(o.rows.every(p=>p.scoreKind==='evidence-strength-not-probability'));
  assert.equal(status.totals.fills,0,'Inspecting opportunities does not execute paper entries');
 }finally{coverage.stop();}

@@ -6,7 +6,7 @@ import {strategyConfig} from './axo-trade-strategy.mjs';
 const now=Date.UTC(2026,9,16,12);
 function input(overrides={}){
  const config={...PAPER_DEFAULTS,...strategyConfig({stopPct:4,maxEntryRiskBps:100,slippageBps:25})},state=newPaperState();state.config=config;
- return {state,config,now,valuation:{complete:true,equityCents:1000000,positions:[]},quote:{chain:'base',liquidity:1000000,price:1},setup:{eligible:true,strategy:'momentum',technical:{atrPct:1},execution:{buyTax:0,sellTax:0}},rank:{eligible:true,category:'bluechip',score:80},...overrides};
+ return {state,config,now,valuation:{complete:true,equityCents:1000000,positions:[]},quote:{chain:'base',liquidity:1000000,price:1},setup:{eligible:true,strategy:'momentum',technical:{atrPct:1},execution:{status:'simulated-route-observed',buyTax:0,sellTax:0}},rank:{eligible:true,category:'bluechip',score:80},...overrides};
 }
 const base=input(),size=sizePaperOpportunity(base);
 assert.ok(size.allocationBps>0&&size.allocationBps<=base.state.config.maxPositionBps);
@@ -21,7 +21,7 @@ const degen=sizePaperOpportunity({...base,rank:{...base.rank,category:'degen'}})
 assert.ok(degen.allocationBps<swing.allocationBps&&swing.allocationBps<size.allocationBps,'Speculative categories receive less risk than blue chips at equal evidence');
 assert.deepEqual([degen.maxHoldingHours,swing.maxHoldingHours,size.maxHoldingHours],[24,120,336]);
 
-for(const execution of [{buyTax:10,sellTax:10},{buyTax:100,sellTax:0},{buyTax:null,sellTax:0}])assert.equal(sizePaperOpportunity({...base,setup:{...base.setup,execution}}).allocationBps,0,'Missing or excessive taxes cannot become a modeled profitable target');
+for(const execution of [{buyTax:10,sellTax:10},{buyTax:100,sellTax:0},{buyTax:null,sellTax:0}])assert.equal(sizePaperOpportunity({...base,setup:{...base.setup,execution:{status:'simulated-route-observed',...execution}}}).allocationBps,0,'Missing or excessive taxes cannot become a modeled profitable target');
 const costFailure=input();costFailure.config.feeBps=100;costFailure.config.slippageBps=500;costFailure.config.tranches=[{targetPct:1,sellPct:25}];
 assert.equal(sizePaperOpportunity(costFailure).allocationBps,0,'A target below round-trip assumptions blocks entry');
 assert.equal(sizePaperOpportunity({...base,rank:{...base.rank,score:NaN}}).allocationBps,0);

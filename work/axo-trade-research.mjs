@@ -10,6 +10,7 @@ export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk
  const cache=new Map(),jobs=new Map(),calls=[];let active=0,wake=null,stopped=false,sweeping=false,lastChain='',timer=null;
  const metrics={completed:0,failed:0,coalesced:0,expired:0,queueFull:0,displaced:0};
  const currentInputs=(p,inputs)=>getCachedRisk?{...inputs,risk:getCachedRisk(p)}:inputs;
+ const cacheFresh=(c,ttl)=>{if(!c||now()<c.at||now()-c.at>=ttl)return false;const evidence=c.inputs?.simulation;if(evidence?.kind!=='bidirectional-quote-paper')return true;return evidence.status==='route-observed'?Number.isFinite(evidence.expiresAt)&&now()<evidence.expiresAt:now()-c.at<Math.min(ttl,30000);};
  const diagnostic=(identity,reason,status='queued')=>({at:now(),identity,eligible:false,status,technical:{status:'unknown',reason},entry:{status:'unknown'},execution:{status:'unknown'},gaps:[reason]});
  function evaluate(c,p,config){
   const market={...c.inputs.p,...Object.fromEntries(['price','liquidity','marketCap','volume1','volume6','volume24','buys','sells','provider'].filter(k=>p?.[k]!==undefined).map(k=>[k,p[k]])),seenAt:p?.observedAt??p?.seenAt??c.inputs.p.seenAt};
@@ -18,14 +19,15 @@ export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk
   market.progression=getCurrentProgression?getCurrentProgression(market):p?.progression||market.progression||null;
   return tradeSetup(market,currentInputs(market,c.inputs),config,now());
  }
- function local(p,config=null){const c=cache.get(paperKey(p));return c&&now()>=c.at&&now()-c.at<=300000?(c.inputs?evaluate(c,p,strategyConfig(config||c.config)):c.value):null;}
+ function local(p,config=null){const c=cache.get(paperKey(p));return cacheFresh(c,300000)?(c.inputs?evaluate(c,p,strategyConfig(config||c.config)):c.value):null;}
+ function revalidate(p,config,executionEvidence){const c=cache.get(paperKey(p));if(!c?.inputs||now()<c.at||now()-c.at>300000)return null;return evaluate({...c,inputs:{...c.inputs,simulation:executionEvidence}},p,strategyConfig(config));}
  function trimCalls(){while(calls.length&&now()-calls[0]>=60000)calls.shift();}
  function status(){trimCalls();return {mode:'shared-priority-queue',active,queued:[...jobs.values()].filter(j=>!j.running).length,capacityPerMinute:perMinute,callsLastMinute:calls.length,nextEligibleAt:calls.length>=perMinute?calls[0]+60000:now(),...metrics,priorities:'Held positions, user requests, signals, discovery; provider caches/backoff still apply'};}
  function schedule(){clearTimeout(wake);if(stopped)return;wake=setTimeout(drain,100);wake.unref?.();}
  async function collect(job){
   try{
    const p=await getProject(job.identity);if(!p||paperKey(p)!==job.key)throw Error('Exact cached pool unavailable');
-   const [history,risk,simulation,rebound]=await Promise.all([getHistory({...job.identity,timeframe:'1h'}).catch(()=>null),getRisk(p).catch(()=>null),getSimulation(job.identity).catch(()=>null),Promise.resolve().then(()=>getRebound(job.identity)).catch(()=>null)]);
+   const [history,risk,simulation,rebound]=await Promise.all([getHistory({...job.identity,timeframe:'1h'}).catch(()=>null),getRisk(p).catch(()=>null),getSimulation({...job.identity,price:p.price}).catch(()=>null),Promise.resolve().then(()=>getRebound(job.identity)).catch(()=>null)]);
    const inputs=structuredClone({p,history,risk,simulation,rebound,priority:venues?.priority(p)||1});
    const entry={at:now(),config:job.config,inputs};cache.set(job.key,entry);metrics.completed++;
    while(cache.size>120)cache.delete(cache.keys().next().value);
@@ -45,7 +47,7 @@ export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk
  }
  function enqueue(identity,config=STRATEGY_DEFAULTS,{priority='interactive'}={}){
   config=strategyConfig(config);const exact=Stream.exact(identity,true),key=paperKey(exact),hit=cache.get(key);
-  if(hit&&now()>=hit.at&&now()-hit.at<120000)return {state:'cached',identity:exact,promise:Promise.resolve(local(exact,config))};
+  if(cacheFresh(hit,120000))return {state:'cached',identity:exact,promise:Promise.resolve(local(exact,config))};
   if(stopped)return {state:'stopped',identity:exact,promise:Promise.resolve(diagnostic(exact,'Research service stopped','unavailable'))};
   let job=jobs.get(key);
   if(job){metrics.coalesced++;job.priority=Math.max(job.priority,priorities[priority]||priorities.interactive);return {state:job.running?'running':'queued',identity:exact,promise:job.promise};}
@@ -58,14 +60,15 @@ export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk
  }
  async function analyze(identity,config=STRATEGY_DEFAULTS,options={}){
   const ticket=enqueue(identity,config,options);let timeout;
-  try{const result=await Promise.race([ticket.promise,new Promise(resolve=>{timeout=setTimeout(()=>resolve(diagnostic(ticket.identity,'Shared research queued; held positions have priority')),waitMs);})]);const c=cache.get(paperKey(ticket.identity));return result.status==='queued'?result:c?.inputs?evaluate(c,await getProject(ticket.identity)||c.inputs.p,strategyConfig(config)):result;}finally{clearTimeout(timeout);}
+  const deadline=Number.isFinite(options.waitMs)?Math.max(1,Math.min(30000,options.waitMs)):waitMs;
+  try{const result=await Promise.race([ticket.promise,new Promise(resolve=>{timeout=setTimeout(()=>resolve(diagnostic(ticket.identity,'Shared research queued; held positions have priority')),deadline);})]);const c=cache.get(paperKey(ticket.identity));return result?.status==='queued'?result:c?.inputs?evaluate(c,await getProject(ticket.identity)||c.inputs.p,strategyConfig(config)):result;}finally{clearTimeout(timeout);}
  }
  async function sweep(){
   if(stopped||sweeping)return;sweeping=true;
   try{
    const positions=await getPositions();for(const p of positions.slice(0,10))try{enqueue(p.identity||{chain:p.chain,address:p.address,pool:p.pool||p.pair},STRATEGY_DEFAULTS,{priority:'position'});}catch{}
    const candidates=getCandidates().filter(p=>Assets.isSuggestedProject(p)&&p.seenAt>0&&p.seenAt<=now()&&now()-p.seenAt<=300000&&Risk.evaluate(p,getCachedRisk?.(p),now()).status==='screened');
-   const pending=candidates.filter(p=>{const key=paperKey(p),hit=cache.get(key);return !jobs.has(key)&&!(hit&&now()>=hit.at&&now()-hit.at<120000);});
+   const pending=candidates.filter(p=>{const key=paperKey(p),hit=cache.get(key);return !jobs.has(key)&&!cacheFresh(hit,120000);});
    const ordered=fairResearchCandidates(pending,{now:now(),limit:5}).rows;
    for(const p of ordered.slice(0,5))try{enqueue({chain:p.chain,address:p.address,pool:p.pair||p.pool},STRATEGY_DEFAULTS,{priority:'discovery'});}catch{}
   }finally{sweeping=false;}
@@ -77,5 +80,5 @@ export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk
   res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));return true;
  }
  if(autoStart){timer=setInterval(()=>void sweep().catch(()=>{}),15000);timer.unref?.();}
- return {analyze,enqueue:(p,c,o)=>{const t=enqueue(p,c,o);return {state:t.state,identity:t.identity};},local,handle,status,sweep,drain,stop(){stopped=true;clearTimeout(wake);clearInterval(timer);for(const [key,j]of jobs)if(!j.running){j.resolve(diagnostic(j.identity,'Research service stopped','unavailable'));jobs.delete(key);}}};
+ return {analyze,revalidate,enqueue:(p,c,o)=>{const t=enqueue(p,c,o);return {state:t.state,identity:t.identity};},local,handle,status,sweep,drain,stop(){stopped=true;clearTimeout(wake);clearInterval(timer);for(const [key,j]of jobs)if(!j.running){j.resolve(diagnostic(j.identity,'Research service stopped','unavailable'));jobs.delete(key);}}};
 }
