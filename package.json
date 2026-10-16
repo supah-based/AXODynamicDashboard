@@ -1,6 +1,6 @@
 {
   "name": "axo-local-research-dashboard",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.7",
@@ -45,7 +45,8 @@
     "test:radar": "node work/test-radar-flow.mjs && node work/test-public-ribbon.mjs && node work/test-radar-modes-browser.mjs && node work/test-global-ribbon-browser.mjs",
     "test:evidence-integrity": "node work/test-evidence-integrity.mjs && node work/test-project-data.mjs && node work/test-trade-research.mjs && node work/test-evidence-loading-browser.mjs && node work/test-data-brief-browser.mjs",
     "test:usability": "node work/test-usability-model.mjs && node work/test-usability-browser.mjs",
-    "test:workspace-ux": "node work/test-workspace-ux-browser.mjs"
+    "test:workspace-ux": "node work/test-workspace-ux-browser.mjs",
+    "test:volume-lens": "node work/test-volume-lens-model.mjs && node work/test-volume-lens-browser.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

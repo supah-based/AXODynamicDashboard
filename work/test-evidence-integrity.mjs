@@ -12,7 +12,7 @@ import {publicProject} from './axo-answer-context.mjs';
 let at=Date.now();const initial=at,address='0x'+'1'.repeat(40),pair='0x'+'2'.repeat(40),p={id:'integrity-fixture',chain:'base',address,pair,provider:'Fixture provider',seenAt:at,price:1,marketCap:1000000,liquidity:100000,volume5:1000,volume1:6500,volume24:30000,transactions:{m5:{buys:15,sells:5},h1:{buys:40,sells:20}}};
 const risk=project=>({chain:project.chain,address:project.address,status:'available',source:'GoPlus',receivedAt:at,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0'}))});
 assert.equal(Intel.brief(p,{risk:{status:'screened'},now:at}).state,'investigate');
-for(const bad of [{...p,volume5:8000},{...p,transactions:{m5:{buys:80,sells:30},h1:{buys:10,sells:5}}},{...p,volume1:Infinity},{...p,transactions:{m5:{buys:1.5,sells:2}}},{...p,buys:40.5},{...p,buys:80}]){
+for(const bad of [{...p,transactions:{m5:{buys:20,sells:0},h1:{buys:10,sells:50}}},{...p,volume5:8000},{...p,transactions:{m5:{buys:80,sells:30},h1:{buys:10,sells:5}}},{...p,volume1:Infinity},{...p,transactions:{m5:{buys:1.5,sells:2}}},{...p,buys:40.5},{...p,buys:80}]){
  assert.equal(Intel.quality(bad,at).status,'inconsistent');assert.equal(Intel.brief(bad,{risk:{status:'screened'},now:at}).state,'check-data');assert.equal(Intel.brief(bad,{risk:{status:'screened'},now:at}).signals.length,0);
  assert.equal(publicRibbon({pools:[bad],risk,now:at}).projects.length,0);const book=createObservationBook({now:()=>at});assert.equal(book.observe(bad).status,'unavailable');assert.equal(book.status().snapshots,0);
  assert.equal(screenProjects([{...bad,createdAt:at-60000}],'degen',{now:at}).length,0);

@@ -1,0 +1,27 @@
+/* Trading activity distribution, never a bridge or net-capital-flow estimator. */
+(function(root,factory){const api=factory(typeof module==='object'&&module.exports?require('./axo-market-intel.cjs'):root.AxoMarketIntel,typeof module==='object'&&module.exports?require('./axo-visual-model.cjs'):root.AxoVisualModel);if(typeof module==='object'&&module.exports)module.exports=api;else root.AxoVolumeLens=api;})(globalThis,function(Intel,Visual){
+ const DAY=86400000,num=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0,stamp=(t,now,ttl)=>Number.isSafeInteger(t)&&t>0&&t<=now&&now-t<=ttl;
+ function sources(snapshot,cached,now=Date.now()){
+  const feeds={...snapshot?.feeds};for(const d of cached||[]){if(!d||!Array.isArray(snapshot?.chains)||!snapshot.chains.some(c=>c.id===d.chain))continue;const key='dex-'+d.chain,f=d.dex,t=f?.receivedAt,old=feeds[key];if(!Number.isSafeInteger(t)||t<=0||t>now||Number.isSafeInteger(old?.receivedAt)&&old.receivedAt>0&&old.receivedAt<=now&&(old.receivedAt>t||old.receivedAt===t&&(old.status==='live'||f.status!=='live'||d.status==='stale')))continue;feeds[key]={...f,...(d.status==='stale'?{status:'stale'}:{})};}return {...snapshot,feeds};
+ }
+ function chains(snapshot,{now=Date.now(),mode='rolling'}={}){
+  const end=Math.floor(now/DAY)*DAY,day=end-DAY,previousDay=day-DAY;
+  const rows=(Array.isArray(snapshot?.chains)?snapshot.chains:[]).map(c=>{const f=snapshot.feeds?.['dex-'+c.id],current=f?.status==='live'&&stamp(f.receivedAt,now,900000),days=new Map(),conflicts=new Set();for(const r of Array.isArray(f?.data?.history)?f.data.history:[]){if(!Number.isSafeInteger(r?.time)||r.time<=0||r.time%DAY!==0||r.time>=end||!num(r.value))continue;if(days.has(r.time)&&days.get(r.time)!==r.value)conflicts.add(r.time);days.set(r.time,r.value);}for(const t of conflicts)days.delete(t);const value=mode==='day'?days.get(day):f?.data?.volume,prior=mode==='day'?days.get(previousDay):f?.data?.previous,available=current&&num(value),previous=available&&num(prior)?prior:null,delta=previous===null?null:value-previous;
+   return {chain:c.id,name:c.name,color:/^#[0-9a-f]{6}$/i.test(c.color||'')?c.color:'#78909c',value:available?value:null,retained:num(value)?value:null,previous,delta,percent:previous>0&&Number.isFinite(delta/previous*100)?delta/previous*100:null,status:available?'available':!current?'Source dated or unavailable':'Matching UTC day missing',source:f?.source||'Source unavailable',receivedAt:Number.isSafeInteger(f?.receivedAt)&&f.receivedAt>0&&f.receivedAt<=now?f.receivedAt:null,history:Array.from({length:7},(_,i)=>{const time=day-(6-i)*DAY;return {time,value:days.get(time)??null};})};});
+  const available=rows.filter(r=>r.value!==null),total=available.reduce((s,r)=>s+r.value,0),comparable=available.length>0&&available.every(r=>r.previous!==null),priorTotal=comparable?available.reduce((s,r)=>s+r.previous,0):null;
+  for(const r of rows){r.share=r.value!==null&&num(total)&&total>0?r.value/total:null;r.shareDelta=comparable&&num(total)&&num(priorTotal)&&total>0&&priorTotal>0&&r.previous!==null?(r.value/total-r.previous/priorTotal)*100:null;}
+  return {rows,total:num(total)?total:null,available:available.length,coverage:rows.length,comparable,priorTotal,day:mode==='day'?day:null,mode};
+ }
+ function intervals(p,now=Date.now()){
+  const at=p?.seenAt,ttl=p?.provider==='GeckoTerminal'?900000:180000,issues=Intel.integrity(p).issues,valid=!!Visual.identity(p)&&stamp(at,now,ttl)&&p.observationStatus!=='stale'&&!issues.length;
+  const windows=[['m5','volume5'],['h1','volume1'],['h6','volume6'],['h24','volume24']],totals=windows.map(([key,field])=>({volume:num(p?.[field])?p[field]:null,buys:Number.isSafeInteger(p?.transactions?.[key]?.buys)&&p.transactions[key].buys>=0?p.transactions[key].buys:null,sells:Number.isSafeInteger(p?.transactions?.[key]?.sells)&&p.transactions[key].sells>=0?p.transactions[key].sells:null}));
+  const segments=[['Recent 5m',5],['5–60m ago',55],['1–6h ago',300],['6–24h ago',1080]].map(([label,minutes],i)=>{const a=totals[i],b=i?totals[i-1]:{volume:0,buys:0,sells:0},diff=k=>valid&&a[k]!==null&&b[k]!==null&&a[k]>=b[k]?a[k]-b[k]:null,volume=diff('volume'),buys=diff('buys'),sells=diff('sells'),trades=buys!==null&&sells!==null&&Number.isSafeInteger(buys+sells)?buys+sells:null;return {label,minutes,volume,rate:volume===null?null:volume/minutes,buys,sells,trades,tradeRate:trades===null?null:trades/minutes};});
+  const pace=segments[0].rate!==null&&segments[1].rate>0?segments[0].rate/segments[1].rate:null;
+  return {key:Visual.identity(p),status:issues.length?'inconsistent':valid?'available':'dated_or_unavailable',at:stamp(at,now,7*DAY)?at:null,issues,segments,pace:Number.isFinite(pace)?pace:null};
+ }
+ function sample(input,chain,now=Date.now()){
+  const unique=new Map();for(const p of input||[]){if(p.chain!==chain||intervals(p,now).status!=='available'||!num(p.volume24))continue;const key=chain+':'+(chain==='solana'?p.address:p.address.toLowerCase()),old=unique.get(key);if(!old||(p.liquidity??-1)>(old.liquidity??-1))unique.set(key,p);}
+  const rows=[...unique.values()].sort((a,b)=>b.volume24-a.volume24||Visual.identity(a).localeCompare(Visual.identity(b))),total=rows.reduce((s,p)=>s+p.volume24,0);return {rows,total:num(total)?total:null,concentration:num(total)&&total>0?(rows[0]?.volume24||0)/total:null};
+ }
+ return {sources,chains,intervals,sample};
+});
