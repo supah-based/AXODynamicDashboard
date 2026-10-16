@@ -9,3 +9,19 @@ let latestRisk={source:"GoPlus",status:"available",chain:"base",address:a,receiv
 const freshParticipation=service.local({...identity,price:10,provider:'Different provider',observedAt:now,transactions:{h1:{buys:30,sells:10}}},cfg);assert.ok(!freshParticipation.gaps.some(g=>g.includes('participation')),'Fresh nested hourly counts replace older top-level counts when the provider changes');
 
 const currentTime=now+60000,atomic=createTradeResearch({now:()=>currentTime,getProject:async()=>({...p,price:10,seenAt:now}),getHistory:async()=>history,getRisk:async()=>latestRisk,getSimulation:async()=>null});await atomic.analyze(identity);const partial=atomic.local({...identity,price:10,observedAt:currentTime,liquidity:1000000},cfg);assert.ok(partial.gaps.some(g=>g.includes('Actual circulating market cap missing')),'A newer partial quote cannot re-date an older market cap');
+
+const dated={...p,price:10,createdAt:now-10*86400000,tokenCreatedAt:now-30*86400000,tokenAgeSource:'Synthetic exact genesis'};
+let categoryHistoryReads=0;
+const categories=createTradeResearch({now:()=>now,getProject:async()=>dated,getHistory:async()=>{categoryHistoryReads++;return history;},getRisk:async()=>latestRisk,getSimulation:async()=>null});
+await categories.analyze(identity);
+assert.equal(categories.local(dated,cfg).category,'swing');
+const revoked={...dated,tokenCreatedAt:null,tokenAgeSource:null};
+assert.equal(categories.local(revoked,cfg).category,null,'Explicitly revoked current genesis evidence cannot survive in cached setup inputs');
+const listed={...revoked,marketCap:2e9,credibleListing:{chain:p.chain,address:p.address,coinId:'synthetic-test',rank:10,marketCap:2e9,at:now}};
+assert.equal(categories.local(listed,cfg).category,'bluechip','New separately dated exact listing enriches the cached history immediately');
+assert.equal(categories.local({...listed,credibleListing:null},cfg).category,null,'Listing revocation immediately removes cached category qualification');
+assert.equal(categories.local({...listed,credibleListing:{...listed.credibleListing,address:b}},cfg).category,null,'Mismatched current listing cannot borrow cached exact listing');
+assert.equal(categories.local({...listed,credibleListing:{...listed.credibleListing,at:now+1}},cfg).category,null,'Future-dated current listing cannot borrow cached exact listing');
+assert.equal(categoryHistoryReads,1,'Identity facts update without another history fetch');
+categories.stop();
+console.log('PASS cached technical setup category enrichment, explicit age/listing revocation, wrong-identity and future-dated listing rejection without extra history calls.');

@@ -1,3 +1,4 @@
+import {fairResearchCandidates} from './axo-paper-opportunities.mjs';
 import {tradeSetup,STRATEGY_DEFAULTS,strategyConfig} from './axo-trade-strategy.mjs';
 import Stream from './axo-stream-schema.cjs';
 import Risk from './axo-risk-policy.cjs';
@@ -12,6 +13,7 @@ export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk
  const diagnostic=(identity,reason,status='queued')=>({at:now(),identity,eligible:false,status,technical:{status:'unknown',reason},entry:{status:'unknown'},execution:{status:'unknown'},gaps:[reason]});
  function evaluate(c,p,config){
   const market={...c.inputs.p,...Object.fromEntries(['price','liquidity','marketCap','volume1','volume6','volume24','buys','sells','provider'].filter(k=>p?.[k]!==undefined).map(k=>[k,p[k]])),seenAt:p?.observedAt??p?.seenAt??c.inputs.p.seenAt};
+  if(Number.isFinite(p?.seenAt))for(const field of ['credibleListing','tokenCreatedAt','tokenAgeSource','createdAt'])market[field]=p[field]??null;
   const sameProvider=!p?.provider||p.provider===c.inputs.p.provider,tx=p?.transactions?.h1,supplied=p?.buys!==undefined||p?.sells!==undefined||tx;if(supplied){market.buys=p?.buys??tx?.buys??null;market.sells=p?.sells??tx?.sells??null;}market.participationObservedAt=supplied?market.seenAt:sameProvider?c.inputs.p.seenAt:null;if(!sameProvider&&!supplied){market.buys=null;market.sells=null;market.transactions=null;}if(market.seenAt!==c.inputs.p.seenAt||!sameProvider){for(const field of ['price','liquidity','marketCap','volume1','volume6','volume24'])market[field]=p?.[field]??null;market.activityIntegrity=p?.activityIntegrity||null;market.transactions=p?.transactions||null;market.volume5=p?.volume5??null;market.providerObservations=p?.providerObservations||[];}
   market.progression=getCurrentProgression?getCurrentProgression(market):p?.progression||market.progression||null;
   return tradeSetup(market,currentInputs(market,c.inputs),config,now());
@@ -63,8 +65,9 @@ export function createTradeResearch({getProject,getHistory,getRisk,getCachedRisk
   try{
    const positions=await getPositions();for(const p of positions.slice(0,10))try{enqueue(p.identity||{chain:p.chain,address:p.address,pool:p.pool||p.pair},STRATEGY_DEFAULTS,{priority:'position'});}catch{}
    const candidates=getCandidates().filter(p=>Assets.isSuggestedProject(p)&&p.seenAt>0&&p.seenAt<=now()&&now()-p.seenAt<=300000&&Risk.evaluate(p,getCachedRisk?.(p),now()).status==='screened');
-   const groups=new Map();for(const p of candidates.sort((a,b)=>(b.volume1||0)-(a.volume1||0))){const key=paperKey(p),hit=cache.get(key);if(jobs.has(key)||hit&&now()>=hit.at&&now()-hit.at<120000)continue;if(!groups.has(p.chain))groups.set(p.chain,p);}
-   for(const p of groups.values())try{enqueue({chain:p.chain,address:p.address,pool:p.pair||p.pool},STRATEGY_DEFAULTS,{priority:'discovery'});}catch{}
+   const pending=candidates.filter(p=>{const key=paperKey(p),hit=cache.get(key);return !jobs.has(key)&&!(hit&&now()>=hit.at&&now()-hit.at<120000);});
+   const ordered=fairResearchCandidates(pending,{now:now(),limit:5}).rows;
+   for(const p of ordered.slice(0,5))try{enqueue({chain:p.chain,address:p.address,pool:p.pair||p.pool},STRATEGY_DEFAULTS,{priority:'discovery'});}catch{}
   }finally{sweeping=false;}
  }
  async function handle(req,res,u){
