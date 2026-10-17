@@ -1,6 +1,6 @@
 {
   "name": "axo-local-research-dashboard",
-  "version": "0.3.16",
+  "version": "0.3.17",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.7",
@@ -51,6 +51,7 @@
     "test:paper-opportunity-browser": "node work/test-paper-opportunity-browser.mjs",
     "test:paper-five-chains": "node work/test-paper-routes.mjs && node work/test-paper-execution-policy.mjs && node work/test-paper-policy-migrations.mjs && node work/test-paper-five-chain-engine.mjs",
     "test:community-lab": "node work/test-community-lab.mjs && node work/test-community-api.mjs && node work/test-personal-intelligence.mjs && node work/test-personal-ui.mjs",
+    "test:hatchery-heat": "node work/test-hatchery-heat.mjs && node work/test-hatchery-heat-browser.mjs",
     "test:community-lab-browser": "node work/test-community-lab-browser.mjs"
   },
   "dependencies": {
