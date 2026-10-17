@@ -1,6 +1,6 @@
 {
   "name": "axo-local-research-dashboard",
-  "version": "0.3.17",
+  "version": "0.3.18",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.7",
@@ -46,7 +46,7 @@
     "test:evidence-integrity": "node work/test-evidence-integrity.mjs && node work/test-project-data.mjs && node work/test-trade-research.mjs && node work/test-evidence-loading-browser.mjs && node work/test-data-brief-browser.mjs",
     "test:usability": "node work/test-usability-model.mjs && node work/test-usability-browser.mjs",
     "test:workspace-ux": "node work/test-workspace-ux-browser.mjs",
-    "test:volume-lens": "node work/test-volume-lens-model.mjs && node work/test-volume-lens-browser.mjs",
+    "test:volume-lens": "node work/test-volume-source-recovery.mjs && node work/test-volume-lens-model.mjs && node work/test-volume-lens-browser.mjs",
     "test:paper-opportunities": "node work/test-paper-opportunities.mjs && node work/test-paper-universe.mjs && node work/test-paper-sizing.mjs && node work/test-paper-cohorts.mjs && node work/test-paper-opportunity-engine.mjs && node work/test-paper-plan-integrity.mjs",
     "test:paper-opportunity-browser": "node work/test-paper-opportunity-browser.mjs",
     "test:paper-five-chains": "node work/test-paper-routes.mjs && node work/test-paper-execution-policy.mjs && node work/test-paper-policy-migrations.mjs && node work/test-paper-five-chain-engine.mjs",

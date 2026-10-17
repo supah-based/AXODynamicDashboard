@@ -5,6 +5,12 @@ const observationContext=new AsyncLocalStorage();
 export async function withSourceObservations(operation){const source={reads:0,oldestAt:null,partial:false};const value=await observationContext.run(source,operation);return {value,source};}
 const policies={geckoterminal:{spacing:6000,perMinute:24,concurrency:2},dexscreener:{spacing:500,perMinute:120,concurrency:3},coingecko:{spacing:2200,perMinute:25,concurrency:2},goplus:{spacing:2000,perMinute:20,concurrency:2},defillama:{spacing:350,perMinute:100,concurrency:3},default:{spacing:1000,perMinute:40,concurrency:2}};
 export function sourceProvider(host){return host==='api.geckoterminal.com'?'geckoterminal':host==='api.dexscreener.com'?'dexscreener':/(^|\.)coingecko\.com$/.test(host)?'coingecko':host==='api.gopluslabs.io'?'goplus':/(^|\.)(llama\.fi|defillama\.com)$/.test(host)?'defillama':host;}
+// The bounded global DEX catalog is larger than individual chain responses.
+// Keep the default cap for every other source and for chart/breakdown exports.
+export function sourceResponseLimit(url,responseType='json'){
+ const u=new URL(url);
+ return responseType==='json'&&u.hostname==='api.llama.fi'&&u.pathname==='/overview/dexs'&&u.searchParams.get('excludeTotalDataChart')==='true'&&u.searchParams.get('excludeTotalDataChartBreakdown')==='true'?4000000:2000000;
+}
 export function createSourceCache({fetchImpl=fetch,now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),policy={},store=null,staleMs=3600000,maxPending=128,maxQueued=24,maxWaitMs=30000}={}){
  const cache=new Map(),pending=new Map(),providers=new Map(),failures=new Map();let durable=store,hits=0,joins=0,reads=0,postgresHits=0,staleHits=0,staleMemoryHits=0,rejected=0;
  function retain(map,key,value,limit=300){map.set(key,value);while(map.size>limit)map.delete(map.keys().next().value);}
@@ -48,13 +54,14 @@ export function createSourceCache({fetchImpl=fetch,now=Date.now,sleep=ms=>new Pr
      p.lastAttemptAt=now();p.lastStatus='loading';reads++;const r=await fetcher(url,{method,body,headers:{accept:'application/json','user-agent':'AxoLocalResearch/1.0',...requestHeaders},redirect:'error',signal:AbortSignal.timeout(20000)});
      if(r.status===429){const raw=r.headers?.get('retry-after'),ms=Number(raw)>0?Number(raw)*1000:Date.parse(raw)-now();p.cooldownUntil=now()+Math.min(3600000,Math.max(60000,Number.isFinite(ms)?ms:0));p.lastStatus='rate limited';}
      if(!r.ok)throw Object.assign(Error('Public source HTTP '+r.status),{status:r.status});
-     if(Number(r.headers?.get('content-length'))>2000000)throw Error('Public source size limit');
-     let parts=[],size=0;for await(const part of r.body){size+=part.byteLength;if(size>2000000)throw Error('Public source size limit');parts.push(Buffer.from(part));}
+     const limit=sourceResponseLimit(url,responseType),tooLarge=()=>Object.assign(Error('Public source size limit'),{code:'source_size_limit'});
+     if(Number(r.headers?.get('content-length'))>limit){await r.body?.cancel?.();throw tooLarge();}
+     let parts=[],size=0;for await(const part of r.body){size+=part.byteLength;if(size>limit)throw tooLarge();parts.push(Buffer.from(part));}
      const value={url,at:now(),data:responseType==='text'?Buffer.concat(parts).toString('utf8'):JSON.parse(Buffer.concat(parts).toString('utf8')),delivery:'fresh'};
      retain(cache,key,value);failures.delete(key);p.lastStatus='available';p.failures=0;p.lastSuccessAt=value.at;
      if(safeRequest&&durable)await durable.put('source',id,{data:value.data,provider:sourceProvider(u.hostname),source:responseType,ttl,staleMs:Math.min(staleMs,86400000),fetchedAt:value.at}).catch(()=>{});
      return value;
-    }catch(e){const endpointError=e.status>=400&&e.status<500&&e.status!==429;p.failures=endpointError?0:p.failures+1;if(p.lastStatus!=='rate limited'){p.lastStatus='unavailable';if(!endpointError)p.cooldownUntil=Math.max(p.cooldownUntil,now()+Math.min(60000,2000*2**Math.min(5,p.failures-1)));}throw e;}finally{release(p);}
+    }catch(e){const endpointError=e.code==='source_size_limit'||e.status>=400&&e.status<500&&e.status!==429;p.failures=endpointError?0:p.failures+1;if(p.lastStatus!=='rate limited'){p.lastStatus='unavailable';if(!endpointError)p.cooldownUntil=Math.max(p.cooldownUntil,now()+Math.min(60000,2000*2**Math.min(5,p.failures-1)));}throw e;}finally{release(p);}
    }catch(e){
     retain(failures,key,{until:now()+Math.min(60000,Math.max(e.status>=400&&e.status<500?30000:5000,(p?.cooldownUntil||now())-now()))});
     const last=memoryFallback();if(last){staleMemoryHits++;return last;}
