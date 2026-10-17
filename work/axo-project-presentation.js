@@ -36,6 +36,7 @@ function axoListEvidence(p,keys){
 }
 const richListProjectRow=axoProjectRow;axoProjectRow=function(p,...args){
  const t=document.createElement('template');t.innerHTML=richListProjectRow(p,...args);const row=t.content.querySelector('.axo-project-row'),m=axoRowModel(p),art=watchOverviewArtwork(m.p);
+ if(!row)return t.innerHTML;
  row.classList.add('apr-rich');if(art.kind==='banner'&&art.artwork){row.classList.add('apr-banner');row.insertAdjacentHTML('afterbegin','<img class="watch-row-artwork apr-banner-art" src="'+esc(art.artwork)+'" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer"><div class="watch-row-shade" aria-hidden="true"></div>')}
  row.querySelector('.axo-momentum')?.remove();row.querySelector('.apr-metrics').insertAdjacentHTML('afterend',axoListEvidence(m.p,['h1','h6','h24','liquidity','volume24','volume1','holder1','holderDelta','holder7','trades','poolAge'])+axoListTrend(m.p));return t.innerHTML;
 };

@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {Readable} from 'node:stream';
+import {createRequire} from 'node:module';
+import {createCommunityLab} from './axo-community-lab.mjs';
+import {createCommunityApi} from './axo-community-api.mjs';
+import {walletKey} from './axo-personal-model.mjs';
+import Model from './axo-community-lab-model.cjs';
+const require=createRequire(new URL('./dom-test/package.json',import.meta.url)),{PGlite}=require('@electric-sql/pglite'),db=new PGlite();
+const wallets=Array.from({length:5},(_,i)=>'0x'+String(i+1).repeat(40)),p={chain:'base',address:'0x'+'a'.repeat(40)},other={chain:'arc',address:'0x'+'b'.repeat(40)};
+let now=Date.now(),allowed=true,queries=0;const session=req=>{if(!req.owner)throw Object.assign(Error('Verify wallet ownership.'),{status:401});return {address:req.owner};};
+const store={query:async(sql,args)=>{queries++;return db.query(sql,args);}},personal={read:async key=>({value:(await db.query('SELECT payload FROM axo_wallet_workspaces WHERE wallet_key=$1',[key])).rows[0]?.payload||{preferences:{}}})};
+const api=createCommunityLab({store,session,authorize:async()=>{if(!allowed)throw Object.assign(Error('Tier not active.'),{status:403});},personal,now:()=>now});
+async function send(body,{owner=wallets[0],method='POST',path='/api/community-lab',origin='https://streams.axo.vision'}={}){const req=Readable.from(body===undefined?[]:[Buffer.from(typeof body==='string'?body:JSON.stringify(body))]);Object.assign(req,{method,owner,headers:{origin,'x-axo-request':'1',host:'streams.axo.vision'}});const res={writeHead(status){this.status=status;},end(raw){this.body=JSON.parse(raw);}};await api.handle(req,res,new URL('https://streams.axo.vision'+path));return res;}
+const post=async(body,options)=>{now+=11000;return send(body,options);};
+const input={action:'finding',project:p,topic:'delivery',text:'A dated release includes a reproducible product update.',source:'https://github.com/supah-based/AXODynamicDashboard/releases',observedAt:now-60000,revision:0};
+try{
+ // Execute the repository migrations in a real disposable Postgres engine.
+ for(const file of (await fs.readdir(new URL('../migrations/',import.meta.url))).filter(f=>/^\d{3}_.+\.sql$/.test(f)).sort())await db.exec(await fs.readFile(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ for(const wallet of wallets)await db.query('INSERT INTO axo_wallet_workspaces(wallet_key,payload) VALUES($1,$2)',[walletKey(wallet),JSON.stringify({preferences:{communitySharing:true}})]);
+ assert.equal((await send(undefined,{method:'GET',owner:null})).body.status,'available');
+ assert.equal((await send(input,{owner:null})).status,401);assert.equal((await send(undefined,{method:'GET',path:'/api/community-lab/own',owner:null})).status,401);
+ assert.equal((await post(input,{origin:'https://evil.example'})).status,403);
+ assert.equal((await post({...input,source:'https://localhost/private'})).status,400);assert.equal((await post({...input,observedAt:now+86400000})).status,400);
+ await db.query('UPDATE axo_wallet_workspaces SET payload=$2 WHERE wallet_key=$1',[walletKey(wallets[0]),JSON.stringify({preferences:{communitySharing:false}})]);assert.equal((await post(input)).status,403);
+ await db.query('UPDATE axo_wallet_workspaces SET payload=$2 WHERE wallet_key=$1',[walletKey(wallets[0]),JSON.stringify({preferences:{communitySharing:true}})]);
+ let result=await post(input);assert.equal(result.status,200,JSON.stringify(result.body));const id=result.body.id;assert.equal(result.body.revision,1);
+ assert.equal((await send({...input,topic:'contract'})).status,429,'Signed contributors are rate limited');
+ assert.equal((await post(input)).status,409,'Duplicate creation cannot overwrite an existing finding');
+ assert.equal((await post({...input,revision:99})).status,409);
+ assert.equal((await post({action:'review',project:p,topic:'delivery',id,revision:1,verdict:'useful'})).status,409,'Self-review rejected by SQL');
+ for(const owner of wallets.slice(1,4))assert.equal((await post({action:'review',project:p,topic:'delivery',id,revision:1,verdict:owner===wallets[3]?'needs-evidence':'useful'},{owner})).status,200);
+ result=await api.snapshot();const review=result.rows[0].checks.find(c=>c.topic==='delivery').findings[0].review;assert.equal(review.reviewers,3);assert.equal(review.status,'mixed-feedback');assert.equal(review.useful,2);assert.equal(review.needsEvidence,1);
+ const publicJson=JSON.stringify(result);for(const wallet of wallets){assert(!publicJson.includes(wallet));assert(!publicJson.includes(walletKey(wallet)));}
+ const before=queries;await api.snapshot();assert.equal(queries,before,'Shared board reads coalesce through a bounded cache');
+ assert.equal((await post({action:'review',project:other,topic:'delivery',id,revision:1,verdict:'useful'},{owner:wallets[4]})).status,409,'Review cannot cross token or chain');
+ assert.equal((await post({...input,revision:1,text:'The release is updated; peer feedback must be renewed.'})).body.revision,2);
+ result=await api.snapshot();assert.equal(result.rows[0].checks.find(c=>c.topic==='delivery').findings[0].review.status,'awaiting-review','Old revision votes do not follow edits');
+ assert.equal((await post({action:'review',project:p,topic:'delivery',id,revision:1,verdict:'useful'},{owner:wallets[1]})).status,409);
+ assert.equal((await post({action:'request',project:other,topic:'contract'})).status,200);
+ assert.equal((await post({action:'request',project:other,topic:'contract'})).status,200);
+ assert.equal((await db.query('SELECT count(*) FROM axo_community_requests')).rows[0].count,1,'Duplicate requests remain one signed wallet');
+ result=await api.snapshot();assert.equal(result.rows.find(r=>r.identity.chain==='arc').checks[0].requesters,null,'Small demand counts withheld');
+ const own=await send(undefined,{method:'GET',path:'/api/community-lab/own'});assert.equal(own.body.findings.length,1);assert.equal(own.body.requests.length,1);
+ assert.equal((await send(undefined,{method:'GET',path:'/api/community-lab/own',owner:wallets[4]})).body.findings.length,0,'Private management is wallet-scoped');
+ await db.query('UPDATE axo_wallet_workspaces SET payload=$2 WHERE wallet_key=$1',[walletKey(wallets[0]),JSON.stringify({preferences:{communitySharing:false}})]);api.invalidate();assert.equal((await api.snapshot()).rows.length,0,'Public queries recheck current owner consent');
+ allowed=false;assert.equal((await post({action:'remove-finding',project:p,topic:'delivery'})).status,200,'Owner withdrawal survives lost tier and consent');
+ assert.equal((await post({...input,revision:2})).status,403);allowed=true;
+ await db.query('UPDATE axo_wallet_workspaces SET payload=$2 WHERE wallet_key=$1',[walletKey(wallets[0]),JSON.stringify({preferences:{communitySharing:true}})]);
+ assert.equal((await post({...input,revision:2})).status,409,'Deleted revision cannot be resurrected by stale edit');
+ assert.equal((await post({...input,revision:0})).status,200);assert.equal((await post({action:'withdraw-all'})).status,200);
+ assert.equal((await db.query('SELECT count(*) FROM axo_community_findings')).rows[0].count,0);assert.equal((await db.query('SELECT count(*) FROM axo_community_reviews')).rows[0].count,0,'Finding withdrawal cascades reviews');
+ const legacy=createCommunityApi({store,session,authorize:async()=>{},personal,onWithdraw:api.withdraw,now:()=>now});assert.equal((await post({...input,revision:0})).status,200);await legacy.withdraw(wallets[0]);assert.equal((await api.own(wallets[0])).findings.length,0,'Existing Profile opt-out/deletion hook removes new research too');
+ for(const owner of wallets.slice(0,3))await db.query("INSERT INTO axo_community_contributions(project_key,owner_key,chain,address,kind,payload,created_at,updated_at) VALUES($1,$2,$3,$4,'interest','{}',now()-interval '8 days',now())",['c'.repeat(64),walletKey(owner),p.chain,p.address]);
+ const legacyBefore=queries,legacyBoard=await legacy.snapshot();assert.equal(queries,legacyBefore+1,'Legacy community aggregation uses one shared bounded query');assert.equal(legacyBoard.rows[0].contributors,3,'Refreshed contributions use their current date, not stale creation date');
+ const unavailable=createCommunityLab({store:{query:async()=>{throw Error('Database unavailable');}},session,authorize:async()=>{},personal});assert.equal((await unavailable.snapshot()).status,'unavailable');
+ let release;const gate=new Promise(resolve=>release=resolve),delayed=createCommunityLab({store:{query:async sql=>{if(sql.startsWith('SELECT'))await gate;return {rows:[]};}},session,authorize:async()=>{},personal});const inFlight=delayed.snapshot();await delayed.withdraw(wallets[0]);release();assert.equal((await inFlight).status,'unavailable','A pre-withdrawal cache job cannot republish its earlier snapshot');
+ assert.equal(Model.projectBoard({now,findings:[{id,owner:'a',topic:'delivery',revision:1,at:now,observedAt:now+1,text:input.text,source:input.source}]}).flatMap(c=>c.findings).length,0);
+ assert.throws(()=>Model.source('https://public.site/?api_key=private'));assert.throws(()=>Model.source('https://127.0.0.1/a'));assert.throws(()=>Model.finding({...input,topic:'toString'},now));
+ console.log('PASS all seven migrations in disposable PostgreSQL; community request/finding/review workflow, revision conflicts, self/cross-project rejection, private ownership, live consent, cache bounds, withdrawal cascades, stale evidence and unavailable storage. No live database, wallet signatures, model calls or rewards used.');
+}finally{await db.close();}

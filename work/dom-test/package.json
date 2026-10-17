@@ -1,5 +1,6 @@
 {
 	"dependencies": {
+		"@electric-sql/pglite": "0.3.9",
 		"linkedom": "^0.18.13"
 	}
 }
