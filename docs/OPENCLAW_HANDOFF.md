@@ -1,3 +1,5 @@
+> Latest additive update: [AXO 0.3.19 reward basket recovery](OPENCLAW_RELEASE_0.3.19.md). Includes an outstanding upstream current-selector repair; no new migration.
+
 > Latest additive update: [AXO 0.3.18 Trading volume explorer recovery](OPENCLAW_RELEASE_0.3.18.md). No new migration; preserve the earlier deployment requirements below.
 
 > Latest additive update: [AXO 0.3.17 inline Hatchery heat calls](OPENCLAW_RELEASE_0.3.17.md), extending the [0.3.16 community research loop](OPENCLAW_RELEASE_0.3.16.md). Preserve the earlier deployment requirements below.

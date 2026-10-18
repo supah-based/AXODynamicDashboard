@@ -42,7 +42,7 @@ export function createSourceCache({fetchImpl=fetch,now=Date.now,sleep=ms=>new Pr
   const memoryFallback=()=>safeRequest&&old&&old.at>0&&old.at<=now()&&now()-old.at<ttl+Math.min(staleMs,86400000)?{...structuredClone(old),delivery:'stale-memory',staleUntil:old.at+ttl+Math.min(staleMs,86400000)}:null;
   if(old&&old.at<=now()&&now()-old.at<ttl){hits++;return {...structuredClone(old),delivery:'cached'};}
   if(pending.has(key)){joins++;return structuredClone(await pending.get(key));}
-  const failed=failures.get(key);if(failed&&failed.until>now()){const last=memoryFallback();if(last){staleMemoryHits++;return last;}throw Error('Source retry cooldown; original observation unavailable');}
+  const failed=failures.get(key);if(failed&&failed.until>now()){const last=memoryFallback();if(last){staleMemoryHits++;return last;}throw Object.assign(Error('Source retry cooldown; original observation unavailable'),{status:failed.status});}
   if(pending.size>=maxPending){rejected++;const last=memoryFallback();if(last){staleMemoryHits++;return last;}throw Error('Shared source capacity reached; retry later');}
   const task=(async()=>{
    const disk=safeRequest&&durable?await durable.get('source',id,{allowStale:true}).catch(()=>null):null;
@@ -63,7 +63,7 @@ export function createSourceCache({fetchImpl=fetch,now=Date.now,sleep=ms=>new Pr
      return value;
     }catch(e){const endpointError=e.code==='source_size_limit'||e.status>=400&&e.status<500&&e.status!==429;p.failures=endpointError?0:p.failures+1;if(p.lastStatus!=='rate limited'){p.lastStatus='unavailable';if(!endpointError)p.cooldownUntil=Math.max(p.cooldownUntil,now()+Math.min(60000,2000*2**Math.min(5,p.failures-1)));}throw e;}finally{release(p);}
    }catch(e){
-    retain(failures,key,{until:now()+Math.min(60000,Math.max(e.status>=400&&e.status<500?30000:5000,(p?.cooldownUntil||now())-now()))});
+    retain(failures,key,{status:e.status,until:now()+Math.min(60000,Math.max(e.status>=400&&e.status<500?30000:5000,(p?.cooldownUntil||now())-now()))});
     const last=memoryFallback();if(last){staleMemoryHits++;return last;}
     if(disk&&disk.staleUntil>now()&&disk.fetchedAt>0&&disk.fetchedAt<=now()&&disk.observedAt<=now()&&now()-disk.fetchedAt<ttl+Math.min(staleMs,86400000)){staleHits++;return {url,at:disk.fetchedAt,data:disk.data,delivery:'stale-postgres',staleUntil:disk.staleUntil};}throw e;
    }

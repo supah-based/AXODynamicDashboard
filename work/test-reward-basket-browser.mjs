@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {runtimeDependency} from './axo-runtime.mjs';
+const {chromium}=runtimeDependency('playwright'),browser=await chromium.launch({channel:process.env.AXO_BROWSER_CHANNEL||'chrome',headless:true}),page=await browser.newPage({viewport:{width:1440,height:1100},reducedMotion:'reduce'}),at=Date.now(),errors=[];
+const data={version:1,identity:{officialMatch:true,chainId:4663,address:'0x219b75d4068253cee3e83b8ad97ac8393d76fb1d'},rewards:{catalogStatus:'available',catalogAt:at,observedAt:at,selected:[{address:'0x'+'1'.repeat(40),symbol:'CURRENT'}],assets:Array.from({length:6},(_,i)=>({address:'0x'+String(i+2).repeat(40),symbol:'HISTORY'+i,distributed:i===0?'12.345678901234567891':String(i+1)})),minimumAxo:'1000000',eligibleHolders:36,eventHistoryComplete:false},fees:{status:'LIVE',observedAt:at,buyBps:490,rewardBps:300}};
+let payload=structuredClone(data),status=200,reads=0,wait=null;
+page.on('pageerror',e=>errors.push(e.message));
+// A failure in unrelated tier metadata must not prevent the reward card loading.
+await page.route('**/api/access-policy',r=>r.fulfill({status:503,json:{error:'Synthetic unrelated policy outage'}}));
+await page.route('**/api/axo-ecosystem',async r=>{reads++;if(wait)await wait;return r.fulfill({status,json:status===200?payload:{error:'Synthetic public source outage'}});});
+await page.route('**/api/events',r=>r.fulfill({contentType:'text/event-stream',body:'data: {}\n\n'}));
+try{
+ await page.goto('http://127.0.0.1:43187/?view=compact-intel',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>typeof axoEducationMarkup==='function');
+ await page.evaluate(async()=>{axoEducationShown?.node.remove();axoEducationShown=null;axoGoStream({type:'home'});const content=await axoEducationMarkup(2),node=axoEducationNode(2,content);axoEducationShown={node,type:2,scope:axoEducationScope(),shownAt:Date.now(),dismissed:false};$('board').append(node);layout();});
+ const card=page.locator('.axo-education');await card.waitFor();assert.match(await card.innerText(),/CURRENT/);assert.match(await card.innerText(),/12\.345678901234567891/);assert.match(await card.innerText(),/1000000 AXO/);assert.match(await card.innerText(),/4.9%/);assert.match(await card.innerText(),/Confirmed holder payments\s+Unverified/);
+ await card.locator('.edu-reward-more summary').click();assert.match(await card.innerText(),/HISTORY5/);
+ payload={...structuredClone(data),rewards:{...data.rewards,catalogStatus:'stale',selected:[{address:'0x'+'1'.repeat(40),symbol:'STALEBASKET'}]}};
+ const before=reads;await card.locator('[data-edu-reward-refresh]').focus();await page.keyboard.press('Enter');await page.waitForFunction(()=>document.querySelector('.edu-reward-status')?.textContent.includes('official selector'));assert.ok(reads>before);assert.doesNotMatch(await card.innerText(),/STALEBASKET/);assert.match(await card.innerText(),/HISTORY0/);assert.equal(await card.locator('[data-edu-reward-refresh]').evaluate(e=>e===document.activeElement),true);
+ for(const theme of ['light','dark'])for(const width of [320,390,1440]){await page.setViewportSize({width,height:1100});await page.evaluate(t=>{document.documentElement.dataset.theme=t;layout();},theme);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));assert.ok(await card.evaluate(e=>e.scrollWidth<=e.clientWidth+1));if(width===390)await card.screenshot({path:'outputs/axo-reward-basket-'+theme+'-390.png'});}
+ status=503;await card.locator('[data-edu-reward-refresh]').click();await page.waitForFunction(()=>document.querySelector('.edu-reward-status')?.textContent.includes('temporarily unavailable'));assert.doesNotMatch(await card.innerText(),/HISTORY0|CURRENT/);assert.equal(await card.locator('[data-edu-reward-refresh]').isEnabled(),true);
+ status=200;payload=structuredClone(data);await card.locator('[data-edu-reward-refresh]').click();await page.waitForFunction(()=>document.querySelector('.edu-content')?.textContent.includes('CURRENT'));assert.match(await card.innerText(),/12\.345678901234567891/);
+ let release;wait=new Promise(r=>release=r);await card.locator('[data-edu-reward-refresh]').click();await page.waitForFunction(()=>document.querySelector('[data-edu-reward-refresh]')?.disabled);await card.locator('.edu-dismiss').click();release();await page.waitForTimeout(100);assert.equal(await page.locator('.axo-education').count(),0,'A late refresh must not resurrect a dismissed card');
+ assert.deepEqual(errors,[]);console.log('PASS: reward card works without access-policy metadata, exact totals and six-asset expansion, current/stale selection separation, keyboard refresh/focus, outage/recovery, mobile themes and dismissed-card race.');
+}finally{await browser.close();}
