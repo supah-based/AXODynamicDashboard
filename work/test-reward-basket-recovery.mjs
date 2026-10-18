@@ -23,9 +23,9 @@ const fake=kind=>async url=>{
 for(const kind of ['legacy','shared','cached']){
  reads=0;const api=createEcosystemApi({now:()=>now,fetchImpl:fake(kind),publicRewards:capture});
  const [a,b]=await Promise.all([api.snapshot(),api.snapshot()]);assert.equal(a,b);assert.equal(reads,1);
- assert.equal(a.identity.officialMatch,true);assert.equal(a.rewards.selected[0].symbol,'AAPL');assert.equal(a.rewards.assets.length,6);assert.equal(a.fees.rewardBps,300);
+ assert.equal(a.identity.officialMatch,true);assert.equal(a.rewards.selected.length,0,'A failed native catalog and unavailable RPC proof must not invent a current selection');assert.equal(a.rewards.assets.length,6);assert.equal(a.fees.rewardBps,300);
  for(const k of protectedKeys){const source=a.sources.find(s=>s.id===k);assert.equal(source.delivery,'public-browser');assert.equal(source.httpStatus,200);assert.equal(a.sources.filter(s=>s.id===k).length,1);}
- const m=Model.model(a,now);assert.equal(m.selected.length,1);assert.equal(m.assets.length,6);assert.equal(m.minimumAxo,'1000000');assert.equal(m.holderPayments,null);
+ const m=Model.model(a,now);assert.equal(m.selected.length,0);assert.equal(m.assets.length,6);assert.equal(m.minimumAxo,'1000000');assert.equal(m.holderPayments,null);
 }
 const staleCapture=async()=>{const d=await capture();d.data.catalog.data.status='STALE';return d;};
 const stale=await createEcosystemApi({now:()=>now,fetchImpl:fake('shared'),publicRewards:staleCapture}).snapshot();assert.equal(stale.rewards.catalogStatus,'stale');assert.equal(stale.rewards.selected.length,0);assert.equal(Model.model(stale,now).assets.length,6,'Historical accounting must remain available when the current selector fails');
