@@ -1,3 +1,5 @@
+> Latest release: [AXO 0.3.20 on-chain current reward selection and deployment request](OPENCLAW_RELEASE_0.3.20.md). Authorized for GitHub publication and AXO deployment; AXO owns the separate HTTP 502 coordination repair. No new migration or dependency.
+
 > Latest additive update: [AXO 0.3.19 reward basket recovery](OPENCLAW_RELEASE_0.3.19.md). Includes an outstanding upstream current-selector repair; no new migration.
 
 > Latest additive update: [AXO 0.3.18 Trading volume explorer recovery](OPENCLAW_RELEASE_0.3.18.md). No new migration; preserve the earlier deployment requirements below.
