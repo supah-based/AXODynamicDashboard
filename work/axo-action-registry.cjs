@@ -1,6 +1,7 @@
 /* Shared capabilities for both voice and text. No executable model output. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.AxoActionRegistry=api;})(globalThis,function(){
  const actions={
+ open_stream:{feature:'ask',target:'stream',description:'Open an existing builtin or saved stream by its exact catalog ID'},
  answer:{feature:'ask',target:'context',description:'Explain dated supplied evidence'},
  open_project:{feature:'ask',target:'exact-project',description:'Open the full exact project page; clarify ambiguous identity'},
  create_stream:{feature:'customCards',target:'chains',description:'Create a saved live research stream'},

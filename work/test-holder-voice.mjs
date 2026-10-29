@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createAiApi} from './axo-ai-api.mjs';
 let clock=1000000, permitted=true, refunded=0, next=0;
 const calls=[],timers=[];
-const api=createAiApi({now:()=>clock,apiKey:()=> 'fixture-not-a-credential',localProvider:null,schedule:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},cancel:t=>{if(t)t.cancelled=true;},fetchImpl:async(url)=>{calls.push(url);return url.endsWith('/hangup')?{ok:true,status:204}:{ok:true,status:201,json:async()=>({session:{id:'fixture-'+(++next)},transport:{type:'webrtc',sdp:'fixture-answer'}})};}});
+const api=createAiApi({liveModel:'gpt-live-1',now:()=>clock,apiKey:()=> 'fixture-not-a-credential',localProvider:null,schedule:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},cancel:t=>{if(t)t.cancelled=true;},fetchImpl:async(url)=>{calls.push(url);return url.endsWith('/hangup')?{ok:true,status:204}:{ok:true,status:201,json:async()=>({session:{id:'fixture-'+(++next)},transport:{type:'webrtc',sdp:'fixture-answer'}})};}});
 const holder={b:{tier:{id:'holder'}},voiceSeconds:120,check:async()=>{if(!permitted)throw Error('Access ended');},refund:async seconds=>{refunded+=seconds;}};
 const first=await api.startVoice('v=0\r\n','fixture-wallet',holder);
 assert.equal(first.expiresAt-clock,120000);

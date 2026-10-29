@@ -1,6 +1,6 @@
 {
   "name": "axo-local-research-dashboard",
-  "version": "0.3.20",
+  "version": "0.3.21",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.7",
@@ -53,7 +53,8 @@
     "test:community-lab": "node work/test-community-lab.mjs && node work/test-community-api.mjs && node work/test-personal-intelligence.mjs && node work/test-personal-ui.mjs",
     "test:reward-basket": "node work/test-reward-selection.mjs && node work/test-reward-basket-recovery.mjs && node work/test-reward-education.mjs && node work/test-reward-basket-browser.mjs",
     "test:hatchery-heat": "node work/test-hatchery-heat.mjs && node work/test-hatchery-heat-browser.mjs",
-    "test:community-lab-browser": "node work/test-community-lab-browser.mjs"
+    "test:community-lab-browser": "node work/test-community-lab-browser.mjs",
+    "test:stream-assistant": "node work/test-realtime-streams.mjs && node work/test-stream-assistant-browser.mjs"
   },
   "dependencies": {
     "@reown/appkit": "1.8.22",

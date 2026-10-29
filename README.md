@@ -4,6 +4,12 @@ A local crypto research dashboard with configurable streams, project discovery, 
 
 Builder and agent integrations should start with [`BUILDER_HANDOFF.md`](BUILDER_HANDOFF.md), then fetch the current `main` branch before making changes.
 
+## Conversational streams and voice
+
+Ask Axo can open builtin or saved streams by name, create and save named streams with supported filters and data-bound cards, and ask before adding an optional improvement. Requests use the active stream and public source references. Existing wallet verification and tier permissions still apply.
+
+Voice defaults to Realtime 2 with Verse. Set `AXO_VOICE_MODEL=gpt-realtime-2.1-mini` for the smaller option, or explicitly select `gpt-live-1` for the legacy protocol. Keep the existing server/personal key configuration; provider errors never silently select another key. Restart after changing the model. See [0.3.21 deployment and validation](docs/OPENCLAW_RELEASE_0.3.21.md).
+
 ## Run locally
 
 Requires Node.js 24 or newer and pnpm. Run commands from the repository root:
