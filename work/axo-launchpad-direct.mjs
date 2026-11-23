@@ -81,7 +81,17 @@ export function createDirectLaunchpadFeeds({sources=publicSources,now=Date.now,b
   if(chain==='arc'){if(bitqueryToken)await read('argus','https://streaming.bitquery.io/graphql','Exact portal launch events',(d,at,url)=>{if(d.errors?.length||!Array.isArray(d.data?.EVM?.Events))throw Error('Invalid feed');return d.data.EVM.Events.map(r=>normalizeArgus(r,at,url)).filter(Boolean)},{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+bitqueryToken},body:JSON.stringify({query:ARGUS_QUERY})});else feeds.push({platform:'argus',url:pad('argus').source,provider:'Bitquery',label:'Exact portal launches',status:'credentials required',fetchedAt:null,error:'Server Bitquery access token is not configured'});}
   for(const id of ['based-bid','openlaunch','safehood'])if(supports(pad(id),chain))feeds.push({platform:id,url:pad(id).source,provider:pad(id).name,label:pad(id).feed,status:'not connected',fetchedAt:null});
   // Reuse cached exact-pool data, then hydrate one bounded batch. Never choose another pool silently.
-  for(const [key,p]of rows){const m=pools.filter(q=>q.chain===chain&&eq(q.address,p.address,chain)&&eq(q.pair,p.pair,chain)&&q.seenAt<=now()&&now()-q.seenAt<900000).sort((a,b)=>b.seenAt-a.seenAt)[0];if(m&&!p.curve)rows.set(key,{...p,...Object.fromEntries(['price','liquidity','volume24','volume6','volume1','volume5','change24','change1','changes','transactions','buys','sells','createdAt','imageUrl','bannerUrl','dex','url','seenAt'].filter(k=>m[k]!==undefined&&m[k]!==null).map(k=>[k,m[k]])),marketSourceUrl:m.url,marketTimestampBasis:'Cached exact-pool observation'});}
+  for(const [key,p] of rows){
+   if(p.curve)continue;
+   const m=pools.filter(q=>q.chain===chain&&eq(q.address,p.address,chain)&&eq(q.pair,p.pair,chain)&&q.provider&&q.url&&!q.curve
+    &&q.observationStatus!=='stale'&&q.seenAt>0&&q.seenAt<=now()&&now()-q.seenAt<300000)
+    .sort((a,b)=>b.seenAt-a.seenAt)[0];
+   if(!m)continue;
+   const metrics=['price','liquidity','marketCap','fdv','volume24','volume6','volume1','volume5','change24','change1','changes','transactions','participants','buys','sells','createdAt','quote','quoteAddress','dex'];
+   const market=Object.fromEntries(metrics.map(field=>[field,m[field]??null]));
+   rows.set(key,{...p,...market,provider:m.provider,seenAt:m.seenAt,url:m.url,imageUrl:m.imageUrl||p.imageUrl,
+    bannerUrl:m.bannerUrl||p.bannerUrl,marketSourceUrl:m.url,marketTimestampBasis:'Cached exact-pool observation'});
+  }
   const candidates=[...rows.values()].filter(p=>!p.curve&&p.pair&&!p.marketSourceUrl),groups=new Map(),batch=[];
   for(const p of candidates){if(!groups.has(p.platform))groups.set(p.platform,[]);groups.get(p.platform).push(p)}
   for(const group of groups.values())group.sort((a,b)=>Number(!!b.providerTrending)-Number(!!a.providerTrending)||(b.launchAt||0)-(a.launchAt||0));

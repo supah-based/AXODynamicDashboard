@@ -1,7 +1,7 @@
 import {publicSources} from './axo-source-cache.mjs';
 // Shared public GeckoTerminal transport: discovery and candle reads share a budget.
-// Robinhood verified against the live /networks?page=3 directory and exact pool endpoint on 2026-10-11.
-export const GECKO_NETWORKS=Object.freeze({solana:'solana',base:'base',bsc:'bsc',ethereum:'eth',robinhood:'robinhood'});
+// Arc and Robinhood use their documented API IDs, verified on the public pool endpoints.
+export const GECKO_NETWORKS=Object.freeze({solana:'solana',base:'base',bsc:'bsc',ethereum:'eth',robinhood:'robinhood',arc:'arc'});
 export function createPublicJson({fetchImpl=fetch,now=Date.now}={}){
  const cache=new Map(),pending=new Map(),calls=[];let active=0,cooldown=0,nextDispatch=0;const queue=[];
  async function get(url,ttl=300000){

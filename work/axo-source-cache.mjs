@@ -3,8 +3,8 @@ import {createHash} from 'node:crypto';
 import {digest} from './axo-durable-store.mjs';
 const observationContext=new AsyncLocalStorage();
 export async function withSourceObservations(operation){const source={reads:0,oldestAt:null,partial:false};const value=await observationContext.run(source,operation);return {value,source};}
-const policies={geckoterminal:{spacing:6000,perMinute:24,concurrency:2},dexscreener:{spacing:500,perMinute:120,concurrency:3},coingecko:{spacing:2200,perMinute:25,concurrency:2},goplus:{spacing:2000,perMinute:20,concurrency:2},defillama:{spacing:350,perMinute:100,concurrency:3},default:{spacing:1000,perMinute:40,concurrency:2}};
-export function sourceProvider(host){return host==='api.geckoterminal.com'?'geckoterminal':host==='api.dexscreener.com'?'dexscreener':/(^|\.)coingecko\.com$/.test(host)?'coingecko':host==='api.gopluslabs.io'?'goplus':/(^|\.)(llama\.fi|defillama\.com)$/.test(host)?'defillama':host;}
+const policies={geckoterminal:{spacing:6000,perMinute:24,concurrency:2},dexscreener:{spacing:500,perMinute:120,concurrency:3},coingecko:{spacing:2200,perMinute:25,concurrency:2},goplus:{spacing:2000,perMinute:20,concurrency:2},defillama:{spacing:350,perMinute:100,concurrency:3},alchemy:{spacing:600,perMinute:40,concurrency:3},default:{spacing:1000,perMinute:40,concurrency:2}};
+export function sourceProvider(host){return host==='api.geckoterminal.com'?'geckoterminal':host==='api.dexscreener.com'?'dexscreener':/(^|\.)coingecko\.com$/.test(host)?'coingecko':host==='api.gopluslabs.io'?'goplus':/(^|\.)(llama\.fi|defillama\.com)$/.test(host)?'defillama':host.endsWith('.g.alchemy.com')?'alchemy':host;}
 // The bounded global DEX catalog is larger than individual chain responses.
 // Keep the default cap for every other source and for chart/breakdown exports.
 export function sourceResponseLimit(url,responseType='json'){
