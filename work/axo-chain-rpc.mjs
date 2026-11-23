@@ -14,6 +14,21 @@ const observedHeight=value=>Number.isSafeInteger(value)&&value>0;
 const hexBlock=value=>typeof value==='string'&&/^0x[0-9a-f]{1,16}$/i.test(value)&&observedHeight(Number(value));
 const rawUint=value=>typeof value==='string'&&/^0x[0-9a-f]{64}$/i.test(value)?BigInt(value):null;
 const authority=value=>value===null?'disabled':chainAddress(value,'solana')?'active':'unknown';
+const metadataText=(value,limit)=>typeof value==='string'
+ ?value.replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g,' ').trim().slice(0,limit)||null:null;
+
+async function tokenMetadata(rpc,address){
+ let deadline;
+ try{
+  const result=await Promise.race([
+   rpc('alchemy_getTokenMetadata',[address],21600000),
+   new Promise(resolve=>{deadline=setTimeout(()=>resolve(null),2500);})
+  ]);
+  const name=metadataText(result?.data?.name,100),symbol=metadataText(result?.data?.symbol,32);
+  return name||symbol?{name,symbol,observedAt:result.at}:null;
+ }catch{return null;}
+ finally{clearTimeout(deadline);}
+}
 
 export function createChainRpc({apiKey=null,source=publicSources,now=Date.now}={}){
  const key=typeof apiKey==='string'&&/^[a-zA-Z0-9_-]{16,120}$/.test(apiKey)?apiKey:null;
@@ -42,7 +57,7 @@ export function createChainRpc({apiKey=null,source=publicSources,now=Date.now}={
    try{
     const identity=(await rpc(chain==='solana'?'getGenesisHash':'eth_chainId',[],3600000)).data;
     if((chain==='solana'?identity:Number(identity))!==config.identity)throw Error('Wrong chain RPC');
-    return {provider:endpoint.provider,...await operation(rpc)};
+    return {provider:endpoint.provider,...await operation(rpc,endpoint.provider)};
    }catch(error){
     if(endpoint.credentials&&[401,403].includes(error?.status))denied.set(chain,now()+1800000);
    }
@@ -64,7 +79,7 @@ export function createChainRpc({apiKey=null,source=publicSources,now=Date.now}={
 
  async function token({chain,address}){
   if(!chainAddress(address,chain))return {status:'unsupported',provider:null,observedAt:null};
-  const token=await onNetwork(chain,async rpc=>{
+  const token=await onNetwork(chain,async (rpc,provider)=>{
    if(chain==='solana'){
     const response=await rpc('getAccountInfo',[address,{encoding:'jsonParsed',commitment:'finalized'}],300000);
     const slot=response.data?.context?.slot,value=response.data?.value,parsed=value?.data?.parsed;
@@ -82,9 +97,14 @@ export function createChainRpc({apiKey=null,source=publicSources,now=Date.now}={
    const base={kind:'contract',height:Number(block.data),observedAt:block.at};
    if(code.data==='0x')return {...base,status:'unconfirmed'};
    if(typeof code.data!=='string'||code.data.length%2||!/^0x[0-9a-f]+$/i.test(code.data))throw Error('Invalid contract bytecode');
-   const result=await Promise.allSettled(['0x313ce567','0x18160ddd'].map(data=>rpc('eth_call',[{to:address,data},block.data],300000)));
-   const decimals=rawUint(result[0].value?.data),supply=rawUint(result[1].value?.data);
-   return {...base,status:'available',decimals:decimals!==null&&decimals<=255n?Number(decimals):null,units:supply?.toString()??null};
+   const [decimalsResult,supplyResult,metadataResult]=await Promise.allSettled([
+    rpc('eth_call',[{to:address,data:'0x313ce567'},block.data],300000),
+    rpc('eth_call',[{to:address,data:'0x18160ddd'},block.data],300000),
+    provider==='Alchemy'?tokenMetadata(rpc,address):null
+   ]);
+   const decimals=rawUint(decimalsResult.value?.data),supply=rawUint(supplyResult.value?.data);
+   return {...base,status:'available',decimals:decimals!==null&&decimals<=255n?Number(decimals):null,
+    units:supply?.toString()??null,metadata:metadataResult.value??null};
   });
   const amount=token.units!==null&&token.units!==undefined&&Number.isSafeInteger(token.decimals)&&token.decimals<=36
    ?exactAmount(token.units,token.decimals):null;

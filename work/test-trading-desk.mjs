@@ -107,31 +107,43 @@ assert.equal(bnbSnapshot.status,'partial');
 
 const key='fixture-credentials-for-test';
 const rpcCalls=[];
-const rpc=createChainRpc({apiKey:key,now:()=>now,source:{get:async (url,options)=>{
+let rpcNow=now,bnbDenied=true,metadataAvailable=true;
+const rpc=createChainRpc({apiKey:key,now:()=>rpcNow,source:{get:async (url,options)=>{
  const host=new URL(url).hostname,request=JSON.parse(options.body);
  assert(!url.includes(key));
  const authenticated=host.endsWith('.g.alchemy.com');
  assert.equal(options.headers.authorization,authenticated?'Bearer '+key:undefined);
  rpcCalls.push({host,method:request.method,params:request.params});
- if(host==='bnb-mainnet.g.alchemy.com')throw Object.assign(Error('Rejected'),{status:403});
+ if(bnbDenied&&host==='bnb-mainnet.g.alchemy.com')throw Object.assign(Error('Rejected'),{status:403});
+ if(!metadataAvailable&&request.method==='alchemy_getTokenMetadata')throw Error('Token API unavailable');
  const values={
-  eth_chainId:host==='bsc-dataseed.bnbchain.org'?'0x38':'0x2105',eth_blockNumber:'0x1234',eth_getCode:'0x1234',
+  eth_chainId:['bnb-mainnet.g.alchemy.com','bsc-dataseed.bnbchain.org'].includes(host)?'0x38':'0x2105',eth_blockNumber:'0x1234',eth_getCode:'0x1234',
   eth_call:request.params[0]?.data==='0x313ce567'?'0x'+(18).toString(16).padStart(64,'0'):'0x'+(9007199254740993180000000000000001n).toString(16).padStart(64,'0'),
+  alchemy_getTokenMetadata:{name:' Fixture ',symbol:'FIX',decimals:6},
   getGenesisHash:'5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d',
   getSlot:123456,
   getAccountInfo:{context:{slot:123456},value:{owner:'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',data:{parsed:{type:'mint',info:{isInitialized:true,decimals:6,supply:'100000001',mintAuthority:null,freezeAuthority:'1'.repeat(32)}}}}}
  };
- return {at:now,data:{jsonrpc:'2.0',id:1,result:values[request.method]}};
+ return {at:rpcNow,data:{jsonrpc:'2.0',id:1,result:values[request.method]}};
 }}});
 assert.equal((await rpc.head('bsc')).provider,'Public RPC');
 assert.equal(rpc.localHead('bsc').height,4660);
-await rpc.head('bsc');
+assert.equal((await rpc.token({chain:'bsc',address:pool('bsc',1).address})).metadata,null);
 assert.equal(rpcCalls.filter(c=>c.host==='bnb-mainnet.g.alchemy.com').length,1);
 assert.equal((await rpc.head('arc')).status,'unavailable','Wrong-chain fallback cannot provide a block');
 const contract=await rpc.token({chain:'base',address:pool('base',1).address});
 assert.equal(contract.provider,'Alchemy');
 assert.equal(contract.amount,'9007199254740993.180000000000000001');
+assert.deepEqual(contract.metadata,{name:'Fixture',symbol:'FIX',observedAt:now});
+assert.equal(contract.decimals,18);
+assert(rpcCalls.some(c=>c.method==='alchemy_getTokenMetadata'&&c.params[0]===pool('base',1).address));
 assert(rpcCalls.some(c=>c.method==='eth_call'&&c.params[0].data==='0x18160ddd'&&c.params[1]==='0x1234'));
+metadataAvailable=false;
+const rpcOnly=await rpc.token({chain:'base',address:pool('base',2).address});
+assert.deepEqual([rpcOnly.provider,rpcOnly.amount,rpcOnly.metadata],['Alchemy',contract.amount,null]);
+rpcNow+=1800001;
+bnbDenied=false;
+assert.equal((await rpc.head('bsc')).provider,'Alchemy');
 const mint=await rpc.token({chain:'solana',address:pool('solana',1).address});
 assert.deepEqual([mint.amount,mint.mintAuthority,mint.freezeAuthority],['100.000001','disabled','active']);
 

@@ -282,8 +282,10 @@
   if(d.status==='unconfirmed')return '<p>Contract or mint could not be confirmed at this observation.</p><small>'+basis+'</small>';
   if(d.status!=='available')return '<p>Current on-chain facts unavailable.</p>';
   const mint=d.kind==='mint';
+  const metadata=d.metadata?[d.metadata.name,d.metadata.symbol].filter(Boolean).join(' · '):'';
   return '<p><b>'+ (mint?'Initialized SPL mint':'Contract bytecode observed')+'</b></p><small>'+basis+'</small>'+
    '<p>Decimals '+esc(d.decimals??'Unknown')+' · Total issued supply '+esc(d.amount??'Unknown')+'</p>'+
+   (metadata?'<p title="'+esc(asOf(d.metadata.observedAt))+'">Alchemy Token API · '+esc(metadata)+'</p>':'')+
    (mint?'<p>Mint authority '+esc(d.mintAuthority)+' · Freeze authority '+esc(d.freezeAuthority)+'</p>':'');
  }
  async function inspectContract(button){

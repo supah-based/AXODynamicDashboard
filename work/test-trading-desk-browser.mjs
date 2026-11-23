@@ -45,7 +45,9 @@ try{
   if(path==='/api/trading-desk/contract'){
    const identity=Object.fromEntries(url.searchParams);
    onchain.push(identity);
-   return route.fulfill({json:{identity,evidence:{status:'available',kind:'contract',provider:'Public RPC',height:72133,observedAt:Date.now(),decimals:18,amount:'9000000000'}}});
+   const observedAt=Date.now();
+   return route.fulfill({json:{identity,evidence:{status:'available',kind:'contract',provider:'Alchemy',height:72133,observedAt,decimals:18,amount:'9000000000',
+    metadata:{name:'Arc sample coin',symbol:'FIX5',observedAt}}}});
   }
   if(path==='/api/trade-setup'){
    const identity=Object.fromEntries(url.searchParams);
@@ -90,6 +92,7 @@ try{
  await dialog.getByText('Contract & pool',{exact:true}).click();
  await dialog.getByRole('button',{name:'Check on-chain facts'}).click();
  await dialog.getByText('Decimals 18 · Total issued supply 9000000000').waitFor();
+ await dialog.getByText('Alchemy Token API · Arc sample coin · FIX5').waitFor();
  assert.deepEqual(onchain,[exactArc]);
  await dialog.getByRole('button',{name:'Follow',exact:true}).click();
  await dialog.getByRole('button',{name:'Following',exact:true}).waitFor();
