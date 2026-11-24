@@ -44,7 +44,7 @@ export function validateAnswer(value,context){
  return {answer:value.answer.trim(),cards:[...new Set(value.cards)],sources:[...new Set(value.sources)].map(id=>{const {data,...source}=context.feeds.find(f=>f.id===id);return source})};
 }
 function historyInput(history){return (Array.isArray(history)?history:[]).slice(-6).filter(m=>['user','assistant'].includes(m?.role)&&typeof m.content==='string').map(m=>({role:m.role,content:m.content.slice(0,1000)}))}
-export function createAiApi({getPersonalIntelligence,getPersonalMemory,getIntelligence,getProjectEvidence,getMarket,getMarketFinding,getState,getProject,getDisplayedProject,getChainFindings,getResearch,getSocial,recordUsage,getEcosystem,getChain,getLaunchpads,getRequestOwner=()=> 'local-default',getVoiceCredential=()=>null,getAdminSettings=()=>({voiceEnabled:true,standardVoiceSessionSeconds:180,standardDailyStarts:10}),getVoiceAccess=()=>null,getRequestVoiceAccess=async()=>undefined,authorizeVoiceAccess=async owner=>getVoiceAccess(owner),apiKey=()=>process.env.OPENAI_API_KEY,fetchImpl=fetch,liveModel=voiceModel(),now=Date.now,schedule=setTimeout,cancel=clearTimeout,localProvider={status:codexStatus,answer:codexAnswer}}={}){
+export function createAiApi({getRotation,getPersonalIntelligence,getPersonalMemory,getIntelligence,getProjectEvidence,getMarket,getMarketFinding,getState,getProject,getDisplayedProject,getChainFindings,getResearch,getSocial,recordUsage,getEcosystem,getChain,getLaunchpads,getRequestOwner=()=> 'local-default',getVoiceCredential=()=>null,getAdminSettings=()=>({voiceEnabled:true,standardVoiceSessionSeconds:180,standardDailyStarts:10}),getVoiceAccess=()=>null,getRequestVoiceAccess=async()=>undefined,authorizeVoiceAccess=async owner=>getVoiceAccess(owner),apiKey=()=>process.env.OPENAI_API_KEY,fetchImpl=fetch,liveModel=voiceModel(),now=Date.now,schedule=setTimeout,cancel=clearTimeout,localProvider={status:codexStatus,answer:codexAnswer}}={}){
  liveModel=voiceModel(liveModel);
  const busy=new Set(),voicePending=new Set();let lastSuccess=null,lastFailure=null;const calls=new Map(),voices=new Map(),voiceResults=new Map(),voiceStarts=[];
  function voiceResult(owner,patch){const old=voiceResults.get(owner)||{};voiceResults.delete(owner);voiceResults.set(owner,{...old,...patch});while(voiceResults.size>128)voiceResults.delete(voiceResults.keys().next().value)}
@@ -94,6 +94,12 @@ export function createAiApi({getPersonalIntelligence,getPersonalMemory,getIntell
    if((asksPump(question)||isPump(stream?.id))&&!context.feeds.some(f=>f.id==='launchpad-projects'))context.feeds.push({id:'pump-scope',source:'Pump.fun scope and coverage',status:'scope only; not project evidence',data:{protocol:'pump-fun',chain:'solana',instruction:'The requested Launchpad activity card is Pump.fun only, with New, Growing and Established tabs. Generic launchpads, ticker/mint suffixes and PumpSwap trading alone do not prove origin. Unless research-card evidence is supplied, project lists are not fetched in this answer; use the launchpads action to update the existing card. Never claim best/safe or future potential from activity alone.'}});
    if(researchKey!=null){const research=typeof researchKey==='string'&&/^[a-f0-9]{64}$/.test(researchKey)?getResearch?.(researchKey):null;if(!research)throw new AiError('research_expired','Refresh the research card, then choose Ask follow-up again; its server-held evidence has expired.',409);context.feeds.push({id:'research-card',source:'User-requested research card',status:'previously fetched; inspect per-source times',receivedAt:research.completedAt,data:research});}
    await appendDashboardContext(context,dashboard,context.activeStream||stream,{getDisplayedProject,getResearch,getProjectEvidence,now});
+   if(getRotation&&(!stream||stream.type==='home'||stream.type==='chain'&&context.activeStream?.chain)){
+    try{
+     const rotation=getRotation(stream?.type==='chain'?context.activeStream.chain:null);
+     if(rotation)context.feeds.push(rotation);
+    }catch{context.feeds.push({id:'chain-rotation',source:'Trading Desk exact-pool observations',status:'unavailable',data:null});}
+   }
    boundAnswerContext(context);
    let response;
    if(localProvider){

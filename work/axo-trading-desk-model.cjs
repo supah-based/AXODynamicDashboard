@@ -1,4 +1,4 @@
-/* Shared filters and ranking for the public Trading Desk. */
+/* Shared filters and pool analytics for the public Trading Desk. */
 (function(root,factory){
  if(typeof module==='object'&&module.exports)module.exports=factory();
  else root.AxoTradingDesk=factory();
@@ -16,12 +16,19 @@
  const LIQUIDITY=[1000,10000,25000,50000,100000,250000];
  const CAPS=[null,1000000,5000000,25000000,100000000];
  const FLOW_WINDOWS={m5:'5m',h1:'1h',h24:'24h'};
+ const ROTATION_WINDOWS={
+  m5:{label:'5m',prior:'55m',duration:HOUR/12,intervals:11,volume:'volume5',total:'volume1',minTurnover:1000},
+  h1:{label:'1h',prior:'23h',duration:HOUR,intervals:23,volume:'volume1',total:'volume24',minTurnover:10000}
+ };
+ const ROTATION_RULES={liquidity:10000,minPools:5,coverage:.5,broadPace:1.5,coolPace:.75,upShare:.6,coolUpShare:.4,dominantShare:.5};
  const SORTS={change5:'5m change',change1:'1h change',change24:'24h change',volume:'Volume',liquidity:'Liquidity',marketCap:'Market cap'};
  const finite=Number.isFinite;
  const normalizeAddress=(chain,value)=>typeof value==='string'?(chain==='solana'?value:value.toLowerCase()):'';
  const tokenKey=p=>p.chain+':'+normalizeAddress(p.chain,p.address);
  const poolKey=p=>tokenKey(p)+':'+normalizeAddress(p.chain,p.pair||p.pool);
  const fresh=(at,now,max=MARKET_MAX_AGE)=>finite(at)&&at>0&&at<=now&&now-at<=max;
+ const currentEvidence=(row,now)=>!row.outside&&!row.risk?.excluded&&row.quality==='current'&&
+  row.project.observationStatus!=='stale'&&fresh(row.project.seenAt,now);
 
  function criteria(value={}){
   return {
@@ -95,15 +102,19 @@
   const first=new Set(head);
   return [...order(head,filters.mode),...sorted.filter(row=>!first.has(row))];
  }
- function signals(rows,now,requestedWindow){
-  const window=Object.hasOwn(FLOW_WINDOWS,requestedWindow)?requestedWindow:'h1';
+ function currentSample(rows,now){
   const unique=new Map();
   for(const row of rows){
    const p=row.project;
-   if(row.outside||row.risk?.excluded||row.quality!=='current'||p.observationStatus==='stale'||!fresh(p.seenAt,now))continue;
+   if(!currentEvidence(row,now))continue;
    const key=tokenKey(p),old=unique.get(key)?.project;
    if(!old||p.seenAt>old.seenAt||p.seenAt===old.seenAt&&p.liquidity>old.liquidity)unique.set(key,row);
   }
+  return unique;
+ }
+ function signals(rows,now,requestedWindow){
+  const window=Object.hasOwn(FLOW_WINDOWS,requestedWindow)?requestedWindow:'h1';
+  const unique=currentSample(rows,now);
   const trades={window,pools:0,buys:0,sells:0,buyShare:null};
   const liquidity={pools:0,usd:0,volume24:0};
   const movers=[];
@@ -135,5 +146,64 @@
   return {pools:unique.size,sampleSize:rows.length,oldestAt,newestAt,trades,liquidity,gainers,losers,withChange:movers.length,
    movers:movers.filter(p=>p.change1!==0).slice(0,3)};
  }
- return {CHAIN_IDS,MARKET_MAX_AGE,MODES,LIQUIDITY,CAPS,FLOW_WINDOWS,SORTS,tokenKey,poolKey,fresh,criteria,qualifies,order,select,signals};
+ function turnoverComparison(project,window){
+  const {duration,intervals,volume,total,minTurnover}=ROTATION_WINDOWS[window];
+  const recent=project[volume],enclosing=project[total];
+  if(!finite(project.createdAt)||project.createdAt<=0||project.seenAt-project.createdAt<duration*(intervals+1))return null;
+  if(!finite(recent)||!finite(enclosing)||recent<0||enclosing<=recent)return null;
+  // Subtract the overlapping volume before normalizing the preceding interval to the same duration.
+  const baseline=(enclosing-recent)/intervals,pace=recent/baseline;
+  if(!(baseline>0)||!finite(pace))return null;
+  const change=project.changes?.[window]??(window==='h1'?project.change1:null);
+  return {recent,baseline,pace,delta:recent-baseline,change:finite(change)?change:null,active:enclosing>=minTurnover};
+ }
+ function followThrough(row,now){
+  if(!currentEvidence(row,now))return {state:'unavailable',m5:null,h1:null,sustained:false};
+  const m5=turnoverComparison(row.project,'m5'),h1=turnoverComparison(row.project,'h1');
+  const {broadPace,coolPace}=ROTATION_RULES;
+  const comparable=m5?.active&&h1?.active&&m5.change!==null&&h1.change!==null;
+  let state='incomplete';
+  if(comparable){
+   const shortLift=m5.pace>=broadPace&&m5.change>0,hourLift=h1.pace>=broadPace&&h1.change>0;
+   if(shortLift&&hourLift)state='building';
+   else if(m5.pace<=coolPace&&m5.change<=0&&hourLift)state='fading';
+   else if(shortLift)state='burst';
+   else state='mixed';
+  }
+  return {state,m5,h1,sustained:row.activity?.sustained===true};
+ }
+ function rotationState(comparable,pools,pace,breadth,concentration){
+  const {minPools,coverage,broadPace,coolPace,upShare,coolUpShare,dominantShare}=ROTATION_RULES;
+  if(!pools)return 'empty';
+  if(comparable<minPools||comparable/pools<coverage)return 'limited';
+  if(concentration>=dominantShare)return 'concentrated';
+  if(pace>=broadPace&&breadth>=upShare)return 'broadening';
+  if(pace<=coolPace&&breadth<=coolUpShare)return 'cooling';
+  return 'mixed';
+ }
+ function rotation(rows,now,requestedWindow){
+  const window=Object.hasOwn(ROTATION_WINDOWS,requestedWindow)?requestedWindow:'m5';
+  const sample=[...currentSample(rows.filter(row=>row.project.liquidity>=ROTATION_RULES.liquidity),now).values()];
+  return {window,chains:CHAIN_IDS.map(chain=>{
+   const poolRows=sample.filter(row=>row.project.chain===chain);
+   const comparable=poolRows.flatMap(({project})=>{
+    const comparison=turnoverComparison(project,window);
+    return comparison?.active&&comparison.change!==null?[{project,...comparison}]:[];
+   });
+   const n=comparable.length,paces=comparable.map(p=>p.pace).sort((a,b)=>a-b),middle=Math.floor(n/2);
+   const pace=n===0?null:n%2?paces[middle]:paces[middle-1]+(paces[middle]-paces[middle-1])/2;
+   const rising=comparable.filter(p=>p.change>0).length,breadth=n?rising/n:null;
+   const lead=comparable.reduce((largest,p)=>!largest||p.recent>largest.recent?p:largest,null);
+   const turnover=comparable.reduce((sum,p)=>sum+p.recent,0);
+   const concentration=finite(turnover)&&turnover>0?lead.recent/turnover:null;
+   const state=rotationState(n,poolRows.length,pace,breadth,concentration);
+   const drivers=[...comparable].sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||poolKey(a.project).localeCompare(poolKey(b.project)));
+   if(state==='concentrated')drivers.unshift(...drivers.splice(drivers.indexOf(lead),1));
+   return {chain,state,pools:poolRows.length,comparable:n,pace,rising,breadth,concentration,
+    newestAt:n?Math.max(...comparable.map(({project})=>project.seenAt)):null,
+    oldestAt:n?Math.min(...comparable.map(({project})=>project.seenAt)):null,
+    drivers:drivers.slice(0,3)};
+  })};
+ }
+ return {CHAIN_IDS,MARKET_MAX_AGE,MODES,LIQUIDITY,CAPS,FLOW_WINDOWS,ROTATION_WINDOWS,ROTATION_RULES,SORTS,tokenKey,poolKey,fresh,criteria,qualifies,order,select,signals,followThrough,rotation};
 });

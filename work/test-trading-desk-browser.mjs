@@ -29,12 +29,21 @@ const data=Desk.CHAIN_IDS.map((chain,i)=>{
 });
 const arc=data[4],alternateArc={...arc,id:'arc:'+evm(90,64),pair:evm(90,64),dex:'Alternate Fixture',quote:'USDC',price:.026,liquidity:24500,volume1:3500,volume5:500,seenAt:at-20000};
 const datedArc={...arc,id:'arc:'+evm(91,64),pair:evm(91,64),dex:'Dated Fixture',quote:'USDT',price:99,seenAt:at-360000};
-const projectRows=[...data,alternateArc,datedArc];
+const rotationPools=['base','bsc','robinhood','arc'].flatMap((chain,index)=>Array.from({length:5},(_,i)=>{
+ const source=data.find(p=>p.chain===chain),pair=evm(920+index*10+i,chain==='arc'?64:40),short=chain==='bsc'?-2:3;
+ const volume5=chain==='arc'&&i===0?32000:chain==='bsc'?500:2400;
+ return {...source,id:chain+':'+pair,address:evm(820+index*10+i),pair,name:names[chain]+' driver '+(i+1),symbol:'MOVE'+(i+1),
+  createdAt:chain==='robinhood'&&i>1?at-15*60000:at-30*3600000,volume5,volume1:chain==='arc'&&i===0?50000:chain==='bsc'?11500:15600,
+  volume6:65000,volume24:chain==='bsc'?160000:195000,changes:{m5:short,h1:3,h24:5}};
+}));
+const projectRows=[...data,alternateArc,datedArc,...rotationPools];
 const screening=createTradingDesk({
  getPools:()=>data,getChain:chain=>({status:'available',sources:[{id:'top',provider:'GeckoTerminal',status:'available',fetchedAt:at-30000}],
   dex:{status:'live',source:'DefiLlama',receivedAt:at-30000,data:{volume:8250000,change:[5,12,-1.8,4.1,2][Desk.CHAIN_IDS.indexOf(chain)]}}}),
  getMarkets:()=>({status:'live',receivedAt:at,data:[{symbol:'btc',price:63000,change:-1,sourceTime:new Date(at-30000).toISOString()}]})
 });
+const rotationFixture=createTradingDesk({getPools:()=>rotationPools});
+let useRotationFixture=false;
 const browser=await chromium.launch({channel:process.env.AXO_BROWSER_CHANNEL||'chrome',headless:true});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:990},reducedMotion:'reduce'});
@@ -50,7 +59,7 @@ try{
    const body=await fs.readFile('outputs'+path).catch(()=>null);
    if(body)return route.fulfill({body,contentType:'image/'+(assetType==='svg'?'svg+xml':assetType)});
   }
-  if(path==='/api/trading-desk')return route.fulfill({json:screening.snapshot()});
+  if(path==='/api/trading-desk')return route.fulfill({json:(useRotationFixture?rotationFixture:screening).snapshot()});
   if(path==='/api/dashboard')return route.fulfill({json:{version:3,chains:Desk.CHAIN_IDS.map(id=>({id,name:names[id]})),chainAppearance,feeds:{},events:[],capabilities:{}}});
   if(path==='/api/stream-memory')return route.fulfill({json:{revision:0,shortcuts:[],tombstones:[],preferences:{},projects:[]}});
   if(path==='/api/project'){
@@ -413,7 +422,57 @@ try{
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,type+' fits '+width+'px');
   }
  }
+ useRotationFixture=true;
+ await page.setViewportSize({width:1440,height:900});
+ await page.evaluate(()=>axoGoStream({type:'home'}));
+ await view.locator('[data-desk-refresh]').click();
+ const rotation=page.locator('[data-card="stream-data-chain-rotation"]'),network=chain=>rotation.locator('[data-rotation-chain="'+chain+'"]');
+ await network('base').getByText('Broadening').waitFor();
+ await network('bsc').getByText('Cooling').waitFor();
+ await network('arc').getByText('Concentrated').waitFor();
+ await network('robinhood').getByText('2/5 comparable').waitFor();
+ await network('solana').getByText('No current sample').waitFor();
+ await view.getByRole('button',{name:'Rotation',exact:true}).click();
+ assert(await rotation.getByRole('heading',{name:'Chain Rotation'}).evaluate(node=>node===document.activeElement));
+ assert.equal(await network('base').getAttribute('aria-pressed'),'true');
+ await rotation.getByText('How it’s measured').click();
+ await rotation.getByText(/A chain signal needs 5 comparable pools/).waitFor();
+ const hour=rotation.getByRole('button',{name:'1h',exact:true}),minutes=rotation.getByRole('button',{name:'5m',exact:true});
+ await hour.click();
+ assert.equal(await hour.getAttribute('aria-pressed'),'true');
+ assert(await hour.evaluate(node=>node===document.activeElement),'Changing window preserves focus');
+ await rotation.getByText('vs. the preceding 23h rate').waitFor();
+ assert.equal(await rotation.locator('details').getAttribute('open'),'');
+ await rotation.getByText('How it’s measured').click();
+ await minutes.click();
+ await network('arc').click();
+ const arcDrivers=rotation.getByRole('region',{name:'Arc rotation drivers'});
+ const leader=arcDrivers.getByRole('button',{name:'Inspect MOVE1 on Arc'});
+ await leader.click();
+ const review=page.getByRole('dialog');
+ await review.getByRole('heading',{name:'Arc driver 1'}).waitFor();
+ await review.getByText('Building across both windows').waitFor();
+ const exactRotation=rotationPools.find(p=>p.chain==='arc'&&p.symbol==='MOVE1');
+ assert.equal(await review.locator('[data-desk-project]').getAttribute('data-desk-project'),Desk.poolKey(exactRotation));
+ await page.keyboard.press('Escape');
+ assert(await leader.evaluate(node=>node===document.activeElement),'Inspect restores focus to the driver');
+ await view.locator('[data-desk-query]').fill('no matching pool');
+ await view.getByText('0 matching pools in the sample',{exact:true}).waitFor();
+ await network('base').getByText('Broadening').waitFor();
+ await view.locator('[data-desk-query]').fill('');
+ const stillCurrent=await rotation.locator('time').getAttribute('datetime');
+ assert.equal(Date.parse(stillCurrent),at-30000);
+ for(const width of [1440,390,320]){
+  await page.setViewportSize({width,height:900});
+  await rotation.evaluate(async node=>{document.activeElement?.blur();layout();await new Promise(requestAnimationFrame);node.scrollIntoView({block:'start',behavior:'instant'});});
+  assert.equal(await rotation.evaluate(node=>document.documentElement.scrollWidth<=innerWidth+1&&
+    [...node.querySelectorAll('[data-rotation-chain]')].every(button=>button.scrollWidth<=button.clientWidth+1)),true,'Rotation fits at '+width+'px');
+  if(width!==320)await rotation.screenshot({path:'outputs/axo-chain-rotation-'+(width===1440?'desktop':'mobile')+'.png',
+   style:'#toast,.composer,.composer-note,body::after{visibility:hidden}.card[data-axo-reading]{outline:none!important;box-shadow:none!important}'});
+ }
+ await page.evaluate(()=>{document.documentElement.dataset.theme='light';layout();});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'Rotation fits in light mode at 320px');
  assert.deepEqual(errors,[]);
  console.log('First result at an 844px viewport height',firstResultPositions);
- console.log('PASS Chrome Trading Desk and project research: exact venue switching, dated evidence, native chart intervals, keyboard and touch controls, sticky jumps, responsive layout, and all five chain streams.');
+ console.log('PASS Chrome Trading Desk, project research and Chain Rotation across five chains at desktop and mobile widths.');
 }finally{await browser.close();}

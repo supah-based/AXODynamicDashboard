@@ -63,7 +63,7 @@ layout=function(){
  const board=$('board'),gap=12,width=board.clientWidth;
  if(width<=0)return;
  const columns=axoBoardColumns(width,gap),columnWidth=(width-gap*(columns-1))/columns;
- const fullWidth=['stream-data-discovery-comparison','stream-data-project-dexchart','stream-data-project-venues','stream-data-action-desk'];
+ const fullWidth=['stream-data-discovery-comparison','stream-data-project-dexchart','stream-data-project-venues','stream-data-action-desk','stream-data-chain-rotation'];
  const wide=['stream-data-discovery','stream-data-watch-overview','stream-data-rebound-research','stream-data-bounce-board','axo-education',
   'brief','chainvolume','news-radar','stream-data-project-chart','stream-data-momentum-board','stream-data-activity-map','stream-data-axo-history','stream-data-axo-pool-chart','stream-data-hatchery-list'];
  const items=[...board.children].map(el=>{

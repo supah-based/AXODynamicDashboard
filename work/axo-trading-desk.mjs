@@ -160,6 +160,21 @@ export function createTradingDesk({
   };
   return cached;
  }
+ function rotationContext(chain=null){
+  if(chain&&!Desk.CHAIN_IDS.includes(chain))return null;
+  const {rows}=snapshot(),at=now();
+  const windows=Object.entries(Desk.ROTATION_WINDOWS).map(([window,{label,prior}])=>{
+   const sample=Desk.rotation(rows,at,window).chains.filter(row=>!chain||row.chain===chain);
+   return {label,prior,chains:sample.map(({drivers,...reading})=>({...reading,drivers:drivers.map(({project:p,delta,recent,pace})=>({
+    symbol:p.symbol,address:p.address,pool:p.pair,provider:p.provider,observedAt:p.seenAt,volumeUsd:recent,volumeVsPrecedingRateUsd:delta,pace
+   }))}))};
+  });
+  const last=Math.max(0,...windows.flatMap(window=>window.chains.map(c=>c.newestAt??0)));
+  return {id:'chain-rotation',source:'Trading Desk exact-pool observations',receivedAt:last||null,
+   status:last?'Current bounded sample':'No comparable current pools',
+   limitations:'One representative pool per token. Pace is the median of comparable pool turnover rates. Broadening needs both faster pace and more pools with rising prices. Concentrated means one pool accounts for at least half the recent turnover. Use comparable and pools as the coverage counts. Volume measures trading activity. Do not infer net flows or claim that the sample covers the chain.',
+   data:{asOf:at,rules:Desk.ROTATION_RULES,windows}};
+ }
  async function handle(req,res,url){
   const contract=url.pathname==='/api/trading-desk/contract';
   if(!contract&&url.pathname!=='/api/trading-desk')return false;
@@ -181,5 +196,5 @@ export function createTradingDesk({
   res.end(JSON.stringify(value));
   return true;
  }
- return {snapshot,handle};
+ return {snapshot,rotationContext,handle};
 }

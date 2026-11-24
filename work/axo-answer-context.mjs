@@ -23,7 +23,7 @@ export async function appendDashboardContext(context,input,stream,{getDisplayedP
 }
 // Keep selected evidence ahead of broad background feeds, with an actual final bound.
 export function boundAnswerContext(context,max=24000){
- const priority=f=>f.id==='research-card'?0:f.id.startsWith('displayed-')?1:['chain-research','chain-findings','project','axo-ecosystem','launchpad-projects'].includes(f.id)?2:3;
+ const priority=f=>f.id==='research-card'?0:f.id.startsWith('displayed-')||f.id==='chain-rotation'?1:['chain-research','chain-findings','project','axo-ecosystem','launchpad-projects'].includes(f.id)?2:3;
  context.feeds.sort((a,b)=>priority(a)-priority(b));
  const clip=(v,depth=0)=>typeof v==='string'?v.slice(0,1600):Array.isArray(v)?v.slice(0,8).map(x=>clip(x,depth+1)):v&&typeof v==='object'?depth>9?null:Object.fromEntries(Object.entries(v).slice(0,36).map(([k,x])=>[k,clip(x,depth+1)])):v;
  context.feeds=context.feeds.map(f=>({...f,data:clip(f.data)}));

@@ -87,6 +87,56 @@ const unsorted=[signalRow(strong),signalRow(weak),signalRow({...quiet,change1:nu
 assert.deepEqual(Desk.select(unsorted,{sort:'change1',direction:'asc'},now).map(r=>r.project.change1),[-29,22,null]);
 assert.deepEqual(Desk.select(unsorted,{sort:'change1',direction:'desc'},now).map(r=>r.project.change1),[22,-29,null]);
 
+const mature=now-30*3600000;
+const runner=(chain,i,extra={})=>pool(chain,i,{
+ createdAt:mature,volume5:2400,volume1:15600,volume6:60000,volume24:195000,changes:{m5:2,h1:3},...extra
+});
+const expanding=Array.from({length:5},(_,i)=>signalRow(runner('base',10+i)));
+const concentrated=Array.from({length:5},(_,i)=>signalRow(runner('arc',10+i,i===0?{volume5:32000,volume1:50000}:{})));
+const cooling=Array.from({length:5},(_,i)=>signalRow(runner('bsc',10+i,{volume5:i===0?0:500,volume1:11500,volume24:160000,changes:{m5:-2,h1:3}})));
+const partial=Array.from({length:11},(_,i)=>signalRow(runner('robinhood',10+i,i<5?{}:{createdAt:i===5?null:now-15*60000})));
+const partialRows=[
+ signalRow({...expanding[0].project,pair:evm(777),seenAt:now-41000,volume5:9500}),
+ signalRow(runner('base',21,{volume1:2400})),
+ signalRow(runner('base',22,{changes:{m5:null,h1:3}})),
+ signalRow(runner('base',23,{liquidity:9999})),
+ signalRow(runner('base',24,{volume5:200,volume1:800})),
+ signalRow(runner('base',25,{volume5:40000,volume1:30000})),
+ signalRow(runner('solana',1),{risk:{excluded:true}}),
+ signalRow(runner('solana',2,{seenAt:now-Desk.MARKET_MAX_AGE-1})),
+ signalRow(runner('solana',3,{seenAt:now+1})),
+ signalRow(runner('solana',4,{observationStatus:'stale'})),
+ signalRow(runner('solana',5),{quality:'conflict'}),
+ signalRow(runner('solana',6),{outside:true})
+];
+const rotationRows=[...expanding,...concentrated,...cooling,...partial,...partialRows];
+const fast=Desk.rotation(rotationRows,now,'m5');
+const byChain=Object.fromEntries(fast.chains.map(row=>[row.chain,row]));
+assert.deepEqual(fast.chains.map(x=>x.state),['empty','broadening','cooling','limited','concentrated']);
+assert.deepEqual([byChain.base.pools,byChain.base.comparable,byChain.base.pace,byChain.base.breadth],[9,5,2,1]);
+assert.deepEqual([byChain.robinhood.comparable,byChain.robinhood.pools],[5,11],'Five comparable pools need at least half the screened sample');
+assert.equal(byChain.base.drivers[0].delta,1200);
+assert.equal(byChain.base.newestAt,now-30000);
+assert.equal(byChain.base.drivers[0].project.pair,expanding[0].project.pair,'Older alternate pools cannot skew the token sample');
+assert.equal(byChain.arc.drivers[0].project.pair,concentrated[0].project.pair);
+assert(byChain.arc.concentration>.5);
+assert.equal(byChain.bsc.drivers[0].pace,0);
+assert.equal(Desk.rotation(expanding,now,'h1').chains[1].pace,2,'Hour pace uses the preceding 23 hours');
+assert.equal(Desk.rotation(expanding,now+Desk.MARKET_MAX_AGE).chains[1].pools,0);
+const followed=Desk.followThrough({...expanding[0],activity:{sustained:true}},now);
+assert.deepEqual([followed.state,followed.sustained,followed.m5.baseline,followed.h1.baseline],['building',true,1200,7800]);
+assert.equal(Desk.followThrough(cooling[1],now).state,'fading');
+assert.equal(Desk.followThrough(signalRow(runner('base',19,{changes:{m5:2,h1:-1}})),now).state,'burst');
+assert.equal(Desk.followThrough(signalRow(runner('base',20,{createdAt:now-2*3600000})),now).h1,null);
+assert.equal(Desk.followThrough(signalRow(runner('base',26,{createdAt:now-2*3600000})),now).state,'incomplete');
+assert.equal(Desk.followThrough(partialRows.at(-1),now).state,'unavailable');
+assert.equal(Desk.followThrough(partialRows[1],now).m5,null,'A zero prior interval yields no ratio');
+assert.equal(Desk.followThrough(partialRows[5],now).m5,null,'Impossible overlapping volumes yield no ratio');
+const publishedRotation=createTradingDesk({getPools:()=>expanding.map(r=>r.project),now:()=>now}).rotationContext('base');
+assert.deepEqual(publishedRotation.data.windows.map(w=>[w.label,w.prior,w.chains.length]),[['5m','55m',1],['1h','23h',1]]);
+assert.equal(publishedRotation.data.windows[0].chains[0].drivers[0].pool,expanding[0].project.pair);
+assert.equal(publishedRotation.data.windows[0].chains[0].drivers[0].provider,'GeckoTerminal');
+
 const raw=JSON.parse((await fs.readFile('work/chain-probe-base.json','utf8')).replaceAll('"base_0x','"arc_0x'));
 const tx=raw.data[0].attributes.transactions.m5;
 Object.assign(tx,{buys:9,sells:3,buyers:7,sellers:2,unique_traders:8});

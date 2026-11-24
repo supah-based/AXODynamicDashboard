@@ -1,11 +1,11 @@
-.axo-trading-desk, .axo-chain-signal-cards {
+.axo-trading-desk, .axo-chain-signal-cards, .axo-chain-rotation {
  --desk-accent: var(--ax-action);
  --desk-positive: var(--ax-green);
  --desk-negative: var(--ax-red);
  --desk-caution: #f3cb78;
  color: var(--ax-text);
 }
-.axo-trading-desk .why-strip, .chain-card[data-card$="-market-signals"] .why-strip { display: none; }
+.axo-trading-desk .why-strip, .axo-chain-rotation .why-strip, .chain-card[data-card$="-market-signals"] .why-strip { display: none; }
 html[data-theme] body .card.axo-trading-desk {
  --accent: var(--desk-accent) !important;
  border-radius: 14px;
@@ -39,7 +39,7 @@ html[data-theme="light"] .axo-desk-dialog {
  flex-wrap: wrap;
 }
 .axo-desk-marketline { gap: 5px 14px; font-size: 13px; padding: 0 0 7px; }
-.axo-desk-marketline > button { margin-inline-start: auto; }
+.axo-desk-market-links { display: flex; gap: 5px; margin-inline-start: auto; }
 .axo-trading-desk small, .axo-chain-signal-cards small, .axo-desk-dialog small { color: var(--ax-muted); font-size: 11px; }
 .axo-desk-marketline em { font-style: normal; font-variant-numeric: tabular-nums; }
 .axo-desk-chains { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 6px; }
@@ -196,8 +196,9 @@ html[data-theme] body .axo-desk-modes .btn[aria-pressed="true"] {
 .axo-desk-badge.observed { color: var(--desk-positive); }
 .axo-desk-badge.caution { color: var(--desk-caution); border-color: color-mix(in srgb,var(--desk-caution) 48%,var(--ax-border)); }
 .axo-desk-badge.danger, .axo-desk-error, .axo-trading-desk .loss, .axo-desk-dialog .loss { color: var(--desk-negative); }
-.axo-trading-desk .gain, .axo-chain-signal-cards .gain, .axo-desk-dialog .gain { color: var(--desk-positive); }
+.axo-trading-desk .gain, .axo-chain-signal-cards .gain, .axo-desk-dialog .gain, .axo-chain-rotation .gain { color: var(--desk-positive); }
 .axo-chain-signal-cards .loss { color: var(--desk-negative); }
+.axo-chain-rotation .loss { color: var(--desk-negative); }
 .axo-desk-row-controls button[aria-pressed="true"] { border-color: var(--desk-accent); color: var(--ax-action); }
 .axo-desk-row-controls .btn { min-width: 36px; }
 .axo-desk-empty, .axo-desk-error { padding: 14px 4px; font-size: 13px; }
@@ -250,8 +251,68 @@ html[data-theme] body .axo-desk-modes .btn[aria-pressed="true"] {
 .axo-desk-compare-grid > section { padding: 9px; border: 1px solid var(--ax-border); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
 .axo-desk-compare-grid dl > div { margin: 7px 0; }
 .axo-desk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; white-space: nowrap; clip-path: inset(50%); }
-.axo-trading-desk :focus-visible, .axo-chain-signal-cards :focus-visible, .axo-desk-dialog :focus-visible, .axo-desk-entry:focus-visible { outline: 2px solid var(--ax-action); outline-offset: 2px; }
+.axo-trading-desk :focus-visible, .axo-chain-signal-cards :focus-visible, .axo-chain-rotation :focus-visible,
+.axo-desk-dialog :focus-visible, .axo-desk-entry:focus-visible { outline: 2px solid var(--ax-action); outline-offset: 2px; }
+.axo-chain-rotation { scroll-margin-block-start: 10px; }
+.axo-chain-rotation small, .axo-chain-rotation time { color: var(--ax-muted); font-size: 11px; }
+.axo-rotation-toolbar, .axo-rotation-detail-head, .axo-rotation-reading {
+ display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px;
+}
+.axo-rotation-toolbar { margin-block-end: 8px; }
+.axo-rotation-toolbar > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; }
+.axo-rotation-toolbar > div { display: flex; gap: 4px; }
+.axo-rotation-toolbar .btn { min-height: 40px; min-width: 44px; }
+.axo-rotation-toolbar .btn[aria-pressed="true"] { color: var(--ax-action); border-color: var(--ax-action); }
+.axo-rotation-grid { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); gap: 10px; }
+.axo-rotation-chains { display: grid; gap: 4px; }
+.axo-rotation-row, .axo-rotation-labels {
+ display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,.54fr) minmax(0,1.15fr);
+ align-items: center; gap: 5px 10px; padding: 5px 9px; color: var(--ax-text);
+}
+.axo-rotation-labels { font-size: 11px; color: var(--ax-muted); }
+.axo-rotation-row, .axo-rotation-drivers button {
+ width: 100%; min-height: 44px; text-align: start; background: var(--ax-inset); border: 1px solid var(--ax-border);
+ border-radius: 8px; color: var(--ax-text); font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.axo-rotation-row[aria-pressed="true"], .axo-rotation-row:hover, .axo-rotation-drivers button:hover {
+ border-color: color-mix(in srgb,var(--desk-accent) 60%,var(--ax-border));
+ background: color-mix(in srgb,var(--desk-accent) 9%,var(--ax-inset));
+}
+.axo-rotation-network { display: flex; gap: 5px; align-items: center; min-width: 0; }
+.axo-rotation-pace { display: grid; grid-template-columns: auto minmax(16px,1fr); gap: 5px; align-items: center; white-space: nowrap; }
+.axo-rotation-meter {
+ height: 6px; border-radius: 3px; position: relative; background: var(--ax-divider); min-width: 0;
+ --rotation-color: var(--scope-accent,var(--desk-accent));
+}
+.axo-rotation-meter::after { content: ''; position: absolute; inset: -2px auto -2px 25%; width: 1px; background: var(--ax-muted); }
+.axo-rotation-meter i { display: block; width: var(--pace); height: 100%; background: var(--rotation-color); border-radius: inherit; }
+.axo-rotation-state { font-size: 12px; font-weight: 620; }
+.axo-rotation-state small { display: block; font-weight: 400; }
+.axo-rotation-state[data-state="broadening"] { color: var(--desk-positive); }
+.axo-rotation-state[data-state="cooling"] { color: var(--desk-negative); }
+.axo-rotation-state[data-state="concentrated"] { color: var(--desk-caution); }
+.axo-rotation-state:is([data-state="limited"],[data-state="empty"]) { color: var(--ax-muted); }
+html[data-theme="light"] .axo-chain-rotation { --desk-caution: #694900; }
+.axo-rotation-key { display: block; margin: 5px 2px 0; }
+.axo-rotation-details { min-width: 0; border: 1px solid var(--ax-border); border-radius: 9px; padding: 9px 10px; }
+.axo-rotation-details h3, .axo-rotation-details h4 { margin: 0; font-size: 13px; }
+.axo-rotation-details p { margin: 5px 0 8px; color: var(--ax-muted); font-size: 12px; line-height: 1.35; }
+.axo-rotation-reading { font-size: 11px; color: var(--ax-muted); margin-block-end: 8px; }
+.axo-rotation-reading b { color: var(--ax-text); }
+.axo-rotation-details h4 small { margin-inline-start: 3px; font-weight: 400; }
+.axo-rotation-drivers { display: grid; gap: 4px; list-style: none; padding: 0; margin: 6px 0 0; }
+.axo-rotation-drivers button { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 7px; align-items: center; padding: 5px 8px; }
+.axo-rotation-drivers button > span:nth-child(2) { text-align: end; }
+.axo-rotation-drivers b, .axo-rotation-drivers small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.axo-rotation-empty { padding-block: 6px; color: var(--ax-muted); }
+.axo-rotation-method { margin-block-start: 7px; color: var(--ax-muted); font-size: 12px; }
+.axo-rotation-method summary { width: fit-content; min-height: 40px; padding-block: 10px; cursor: pointer; }
+.axo-rotation-method p { max-width: 85ch; margin: 0 0 7px; }
+.axo-desk-follow-through { padding-block-start: 9px; }
+.axo-desk-follow-through .axo-desk-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.axo-desk-follow-through small { display: block; margin-block-start: 5px; }
 @media (max-width: 760px) {
+ .axo-rotation-grid { grid-template-columns: minmax(0,1fr); }
  .axo-desk-chains { grid-template-columns: repeat(3,minmax(0,1fr)); }
  .axo-desk-chain { gap: 4px; padding: 5px 6px; min-height: 40px; }
  .axo-desk-filters { display: grid; gap: 6px; }
@@ -288,6 +349,8 @@ html[data-theme] body .axo-desk-modes .btn[aria-pressed="true"] {
  .axo-trading-desk .card-header .category-icon { width: 25px; height: 25px; }
  .axo-trading-desk .card-header .subtitle { font-size: 10px; }
  .axo-desk-marketline { padding-block-end: 5px; }
+ .axo-desk-marketline, .axo-desk-market-links { gap: 4px; }
+ .axo-desk-market-links .btn { min-height: 36px; padding-inline: 6px; font-size: 11px; }
  .axo-desk-marketline > span:nth-child(2), .axo-desk-chains { display: none; }
  .axo-desk-chain-picker { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
  .axo-desk-chain-picker select { flex: 1; min-width: 0; font-size: 16px; }
@@ -307,6 +370,12 @@ html[data-theme] body .axo-desk-modes .btn[aria-pressed="true"] {
  .axo-desk-table td[data-label] { padding-block: 0; line-height: 1.25; }
  .axo-desk-table td[data-label]::before { white-space: nowrap; }
  .axo-desk-dialog footer button, .axo-desk-id-row button { min-height: 40px; }
+ .axo-rotation-labels { display: none; }
+ .axo-rotation-row { grid-template-columns: minmax(0,1fr) minmax(0,.67fr) minmax(0,1fr); gap: 1px 6px; }
+ .axo-rotation-network { grid-area: 1 / 1 / 3 / 2; }
+ .axo-rotation-pace { grid-area: 1 / 2 / 2 / 3; }
+ .axo-rotation-advancing { grid-area: 2 / 2 / 3 / 3; font-size: 10px; }
+ .axo-rotation-state { grid-area: 1 / 3 / 3 / 4; }
 }
 @media (max-width: 360px) {
  .axo-desk-signals > summary { min-height: 31px; }

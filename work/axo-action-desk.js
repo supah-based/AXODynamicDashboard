@@ -1,11 +1,19 @@
 /* The home desk uses the shared public sample. Following stays in this browser's workspace. */
 (function(){
  const Desk=AxoTradingDesk;
- const id='stream-data-action-desk',storageKey='axo-trading-desk-v1',pageSize=8;
+ const id='stream-data-action-desk',rotationId='stream-data-chain-rotation',storageKey='axo-trading-desk-v1',pageSize=8;
  const picked=new Map(),painted=new WeakMap();
  let filters=Desk.criteria(axoReadJson(storageKey,{})||{}),sample=null,loading=false,error='',startedAt=0,limit=pageSize,showAll=false;
  let searchTimer=0,checkExpiry=0,returnFocus=null,inspected=null,check=null,checkRequest=null,contractRequest=null,mode='inspect',mounted=null;
- let flowWindow='h1',signalsExpanded=false;
+ let flowWindow='h1',signalsExpanded=false,rotationWindow='m5',rotationChain=null;
+ const rotationStates={
+  broadening:['Broadening','Volume pace is rising across the sample and most comparable pools are advancing.'],
+  cooling:['Cooling','Volume pace has slowed and few comparable pools are advancing.'],
+  concentrated:['Concentrated','One pool accounts for at least half the recent turnover in this sample.'],
+  mixed:['Mixed','The comparable pools show a mix of price moves and volume pace.'],
+  limited:['Limited coverage','The sample has too few comparable pools for a chain signal.'],
+  empty:['No current sample','There are no current pools for this chain in the rotation screen.']
+ };
  const compactSignals=matchMedia('(max-width: 760px)');
  const dollars=new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',currencyDisplay:'narrowSymbol',notation:'compact',maximumFractionDigits:1});
  const integer=new Intl.NumberFormat(undefined,{notation:'compact',maximumFractionDigits:1});
@@ -13,18 +21,24 @@
  const money=value=>Number.isFinite(value)?dollars.format(value):'—';
  const count=value=>Number.isFinite(value)?integer.format(value):'—';
  const pct=value=>Number.isFinite(value)?(value>0?'+':'')+value.toFixed(1)+'%':'—';
+ const multiple=value=>value===null?'—':value>0&&value<.1?'<0.1×':value.toFixed(1)+'×';
+ const share=value=>value===null?'—':Math.round(value*100)+'%';
+ const moneyDelta=value=>(value>0?'+':value<0?'−':'')+money(Math.abs(value));
  const tone=value=>!Number.isFinite(value)||value===0?'':value>0?'gain':'loss';
  const stamp=at=>at?age(at):'unknown';
  const asOf=at=>at?new Date(at).toLocaleString():'Unknown';
  const funds={active:'1h volume',momentum:'5m volume',new:'1h volume',rebound:'1h volume',following:'1h volume'};
  const root=()=>$('board').querySelector('[data-trading-desk]');
+ const rotationRoot=()=>$('board').querySelector('[data-chain-rotation]');
  const deskResize=new ResizeObserver(()=>requestAnimationFrame(layout));
  const dialog=document.createElement('dialog');
  dialog.className='axo-desk-dialog';
  document.body.append(dialog);
  dialog.setAttribute('aria-labelledby','axoDeskDialogTitle');
  titles[id]='Trading Desk';
+ titles[rotationId]='Chain Rotation';
  cardVisuals[id]=['search','Public market sample','#c8f45d','#26331a'];
+ cardVisuals[rotationId]=['layers','Volume pace and breadth','#c8f45d','#26331a'];
  compactSignals.addEventListener('change',paint);
 
  function setFilters(value){
@@ -73,7 +87,9 @@
    return '<button type="button" class="axo-desk-chain" data-desk-chain="'+esc(c.chain)+'" data-scope-chain="'+esc(c.chain)+'" aria-pressed="'+selected+'" title="'+esc(c.name+' · '+status+(volume?.source?' · 24h DEX volume from '+volume.source:''))+'"><span class="axo-desk-chain-mark">'+chainMark(c.chain)+'</span><span class="axo-desk-chain-name">'+esc(c.name)+'</span>'+measure+'</button>';
   });
   const chainOptions=sample.chains.map(c=>'<option value="'+esc(c.chain)+'" '+(filters.chain===c.chain?'selected':'')+'>'+esc(c.name)+'</option>').join('');
-  return '<div class="axo-desk-marketline">'+bitcoin+'<span><small>24h DEX volume change or current pool count</small></span><button class="btn" type="button" data-desk-open="news">News &amp; narratives</button></div><div class="axo-desk-chains" role="group" aria-label="Trading Desk chain">'+
+  return '<div class="axo-desk-marketline">'+bitcoin+'<span><small>24h DEX volume change or current pool count</small></span><div class="axo-desk-market-links">'+
+   (hidden.includes(rotationId)?'':'<button class="btn" type="button" data-desk-rotation-link>Rotation</button>')+
+   '<button class="btn" type="button" data-desk-open="news">News &amp; narratives</button></div></div><div class="axo-desk-chains" role="group" aria-label="Trading Desk chain">'+
    '<button type="button" class="axo-desk-chain all" data-desk-chain="" aria-pressed="'+!filters.chain+'"><span class="axo-desk-chain-mark">'+chainMark(null)+'</span><span class="axo-desk-chain-name">All chains</span><small>'+sample.chains.filter(c=>Desk.fresh(c.observedAt,Date.now())).length+'/5</small></button>'+networks.join('')+'</div>'+
    '<label class="axo-desk-chain-picker">Chain <select data-desk-chain-picker><option value="">All chains</option>'+chainOptions+'</select></label>';
  }
@@ -210,16 +226,60 @@
  function patchContent(node,markup){
   if(painted.get(node)===markup)return;
   const focus=document.activeElement;
-  const chain=focus&&node.contains(focus)?focus.dataset.deskChain:undefined;
-  const editingChain=focus?.matches('[data-desk-chain-picker]')&&node.contains(focus);
-  const owned=focus&&node.contains(focus),flow=owned&&focus.dataset.deskFlowWindow,mover=owned&&(focus.dataset.deskInspect||focus.dataset.chainProject);
+  const key=focus&&node.contains(focus)&&['data-desk-chain','data-desk-chain-picker','data-desk-flow-window','data-desk-inspect',
+   'data-chain-project','data-desk-rotation-link','data-rotation-window','data-rotation-chain'].find(name=>focus.hasAttribute(name));
+  const value=key&&focus.getAttribute(key);
   node.innerHTML=markup;
   painted.set(node,markup);
-  if(chain!==undefined)[...node.querySelectorAll('[data-desk-chain]')].find(b=>b.dataset.deskChain===chain)?.focus({preventScroll:true});
-  if(editingChain)node.querySelector('[data-desk-chain-picker]')?.focus({preventScroll:true});
-  if(flow)node.querySelector('[data-desk-flow-window="'+flow+'"]')?.focus({preventScroll:true});
-  if(mover)[...node.querySelectorAll('[data-desk-inspect],[data-chain-project]')].find(b=>(b.dataset.deskInspect||b.dataset.chainProject)===mover)?.focus({preventScroll:true});
+  if(key)node.querySelector('['+key+'="'+CSS.escape(value)+'"]')?.focus({preventScroll:true});
   return true;
+ }
+ function rotationMethod(){
+  const r=Desk.ROTATION_RULES,w=Desk.ROTATION_WINDOWS;
+  return '<details class="axo-rotation-method"><summary>How it’s measured</summary>'+
+   '<p>Each chain uses one current Trading Desk pool per token with at least '+esc(money(r.liquidity))+' liquidity. A comparable pool is old enough to cover the full baseline and reports price change and positive prior turnover. It must report '+esc(money(w.m5.minTurnover))+' volume over the full hour for 5m pace, or '+esc(money(w.h1.minTurnover))+' over 24h for 1h pace.</p>'+
+   '<p>Pool pace compares recent turnover with the preceding average for the same duration. Chain pace is the median. A chain signal needs '+r.minPools+' comparable pools and at least '+share(r.coverage)+' sample coverage. Broadening needs '+multiple(r.broadPace)+' pace and '+share(r.upShare)+' advancing. Cooling needs '+r.coolPace+'× or less and '+share(r.coolUpShare)+' or fewer advancing. A pool with '+share(r.dominantShare)+' or more of turnover takes priority as concentrated.</p>'+
+   '<p>USD trading turnover in the sampled pools. Coverage varies by chain and source.</p></details>';
+ }
+ function rotationRow(row,chain){
+  const state=rotationStates[row.state][0],pressed=row.chain===chain;
+  const meter=row.pace===null?'':'<span class="axo-rotation-meter" aria-hidden="true"><i style="--pace:'+Math.min(100,row.pace*25).toFixed(2)+'%"></i></span>';
+  const participation=row.comparable?row.rising+'/'+row.comparable+'<small> up</small>':'—';
+  const coverage=row.pools?row.comparable+'/'+row.pools+' comparable':'0 eligible pools';
+  return '<button type="button" class="axo-rotation-row" data-rotation-chain="'+row.chain+'" data-scope-chain="'+row.chain+'" aria-pressed="'+pressed+'">'+
+   '<span class="axo-rotation-network"><span class="axo-desk-chain-mark">'+chainMark(row.chain)+'</span><b>'+esc(axoChainNames[row.chain])+'</b></span>'+
+   '<span class="axo-rotation-pace"><b>'+esc(multiple(row.pace))+'</b>'+meter+'</span>'+
+   '<span class="axo-rotation-advancing">'+participation+'</span>'+
+   '<span class="axo-rotation-state" data-state="'+row.state+'">'+state+'<small>'+coverage+'</small></span></button>';
+ }
+ function rotationDetails(chain,window){
+  const [label,description]=rotationStates[chain.state];
+  const times=chain.newestAt?'<time datetime="'+new Date(chain.newestAt).toISOString()+'" title="'+esc(asOf(chain.oldestAt)+' to '+asOf(chain.newestAt))+'">Latest '+esc(stamp(chain.newestAt))+'</time>':'';
+  const drivers=chain.drivers.map(({project:p,delta,recent,pace},i)=>
+   '<li><button type="button" data-desk-inspect="'+esc(Desk.poolKey(p))+'" aria-label="Inspect '+esc((p.symbol||p.name)+' on '+axoChainNames[p.chain])+'" aria-describedby="axoRotationDriver'+i+'">'+
+   '<span><b>'+esc(p.symbol||p.name)+'</b><small>'+esc(p.dex||p.provider||'Pool')+'</small></span><span id="axoRotationDriver'+i+'"><b class="'+tone(delta)+'">'+esc(moneyDelta(delta))+'</b><small>'+esc(money(recent))+' vol · '+esc(multiple(pace))+'</small></span><span aria-hidden="true">↗</span></button></li>').join('');
+  return '<section class="axo-rotation-details" aria-label="'+esc(axoChainNames[chain.chain]+' rotation drivers')+'">'+
+   '<div class="axo-rotation-detail-head"><h3>'+esc(axoChainNames[chain.chain])+'</h3><span class="axo-rotation-state" data-state="'+chain.state+'">'+label+'</span></div>'+
+   '<p>'+description+'</p><div class="axo-rotation-reading"><span>Largest pool share <b>'+share(chain.concentration)+'</b></span>'+times+'</div>'+
+   (drivers?'<h4>Pool drivers <small>'+window.label+' volume vs. preceding rate</small></h4><ol class="axo-rotation-drivers" role="list">'+drivers+'</ol>':
+    '<p class="axo-rotation-empty">Comparable pool activity is unavailable for this window.</p>')+'</section>';
+ }
+ function rotationMarkup(now){
+  if(!sample)return '<p class="axo-rotation-empty" role="status">'+(error?'Trading Desk sample is unavailable. Use Refresh above to try again.':'Loading the Trading Desk sample…')+'</p>';
+  const {chains,window}=Desk.rotation(sample.rows,now,rotationWindow),interval=Desk.ROTATION_WINDOWS[window];
+  const chain=chains.find(row=>row.chain===rotationChain)||chains.find(row=>!['limited','empty'].includes(row.state))||
+   chains.find(row=>row.comparable)||chains.find(row=>row.pools)||chains[0];
+  const controls=Object.entries(Desk.ROTATION_WINDOWS).map(([id,w])=>
+   '<button class="btn" type="button" data-rotation-window="'+id+'" aria-pressed="'+(window===id)+'">'+w.label+'</button>').join('');
+  return '<div class="axo-rotation-toolbar"><span><b>'+interval.label+' turnover pace</b><small>vs. the preceding '+interval.prior+' rate</small></span>'+
+   '<div role="group" aria-label="Rotation window">'+controls+'</div></div>'+
+   '<div class="axo-rotation-grid"><div><div class="axo-rotation-labels" aria-hidden="true"><span>Chain</span><span>Median pace</span><span>Rising</span><span>Sample signal</span></div>'+
+   '<div class="axo-rotation-chains" role="group" aria-label="Select a chain to inspect its pools">'+chains.map(row=>rotationRow(row,chain.chain)).join('')+'</div>'+
+   '<small class="axo-rotation-key">Pace scale 0–4× · vertical mark at 1×</small></div>'+rotationDetails(chain,interval)+'</div>';
+ }
+ function paintRotation(now=Date.now()){
+  const view=rotationRoot();
+  if(view&&patchContent(view,rotationMarkup(now)))requestAnimationFrame(layout);
  }
  function chainSignalMarkup(data){
   if(!data)return;
@@ -238,6 +298,10 @@
  }
  function paint(){
   const view=root();
+  const now=Date.now();
+  paintRotation(now);
+  const followThrough=dialog.querySelector('[data-desk-follow-through]');
+  if(dialog.open&&inspected&&followThrough)patchContent(followThrough,followThroughMarkup(inspected));
   if(view!==mounted){
    deskResize.disconnect();mounted=view;
    if(view)deskResize.observe(view);
@@ -268,7 +332,7 @@
   patchContent(view.querySelector('[data-desk-coverage]'),coverage());
   patchContent(view.querySelector('[data-desk-changes]'),recentChanges()||'<li>No dated changes in this sample yet.</li>');
   view.querySelector('[data-desk-context]').textContent=showAll?'Fewer dashboard cards':'More dashboard cards';
-  const now=Date.now(),rows=rowsForView(now),signals=view.querySelector('[data-desk-signals]');
+  const rows=rowsForView(now),signals=view.querySelector('[data-desk-signals]');
   signals.hidden=!sample||following||!rows.length;
   if(!signals.hidden){
    signals.open=!compactSignals.matches||signalsExpanded;
@@ -285,6 +349,15 @@
  }
  function tradeCounts(tx){
   return Number.isFinite(tx?.buys)&&Number.isFinite(tx?.sells)?count(tx.buys)+' buys / '+count(tx.sells)+' sells':'—';
+ }
+ function followThroughMarkup(row){
+  const {state,m5,h1,sustained}=Desk.followThrough(row,Date.now());
+  const labels={building:'Building across both windows',fading:'Short-term activity fading',burst:'Short burst',mixed:'Mixed activity',incomplete:'Limited comparable history',unavailable:'Current evidence unavailable'};
+  if(state==='unavailable')return '<section class="axo-desk-follow-through"><h3>Pool follow-through</h3><p>'+labels[state]+'</p></section>';
+  const metric=(w,result)=>detailMetric(w.label+' vs. prior '+w.prior,result?multiple(result.pace)+' pace · '+pct(result.change)+' price':'—');
+  return '<section class="axo-desk-follow-through"><h3>Pool follow-through</h3><p>'+labels[state]+'</p>'+
+   '<dl class="axo-desk-metrics">'+metric(Desk.ROTATION_WINDOWS.m5,m5)+metric(Desk.ROTATION_WINDOWS.h1,h1)+'</dl>'+
+   (sustained?'<small>Short-term pace held across three spaced observations.</small>':'')+'</section>';
  }
  function watchLabel(project){
   return axoWatch.some(p=>Desk.tokenKey(p)===Desk.tokenKey(project))?'Following':'Follow';
@@ -328,6 +401,7 @@
    detailMetric('Unique traders (5m / 1h)',count(a.unique5)+' / '+count(a.unique1))+detailMetric('Holder addresses',holderFresh?count(h.count):'—')+
    detailMetric('Top holder share',concentration)+detailMetric('Comparable liquidity change',Number.isFinite(a.liquidityChange)?pct(a.liquidityChange)+' since '+stamp(a.baselineAt):'—')+
    detailMetric('Launchpad',row.origin||'Unverified')+'</dl>'+
+   '<div data-desk-follow-through>'+followThroughMarkup(row)+'</div>'+
    (holderFresh?'<p class="axo-desk-detail-note">GoPlus · '+esc(asOf(h.at))+' · Concentration can include pool, burn and locked addresses.</p>':'')+
    (row.risk?.reasons?.length||row.cautions?.length?'<ul class="axo-desk-cautions">'+[...(row.risk.reasons||[]),...(row.cautions||[])].map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul>':'')+
    '<section class="axo-desk-check"><div><h3>Entry &amp; exit evidence</h3><button type="button" class="btn" data-desk-check '+(check?.loading||row.risk?.excluded?'disabled':'')+'>'+(check?'Check again':'Check entry & exit')+'</button></div>'+
@@ -515,6 +589,16 @@
    flowWindow=button.dataset.deskFlowWindow;
    if(axoStream.type==='chain')paintChainSignals();else paint();
   }
+  else if(button.hasAttribute('data-rotation-window')){rotationWindow=button.dataset.rotationWindow;paintRotation();}
+  else if(button.hasAttribute('data-rotation-chain')){rotationChain=button.dataset.rotationChain;paintRotation();}
+  else if(button.hasAttribute('data-desk-rotation-link')){
+   const card=rotationRoot()?.closest('.card'),heading=card?.querySelector('h2');
+   if(heading){
+    heading.tabIndex=-1;
+    card.scrollIntoView({block:'start'});
+    heading.focus({preventScroll:true});
+   }
+  }
   else if(button.hasAttribute('data-desk-chain'))setFilters({chain:button.dataset.deskChain||null});
   else if(button.hasAttribute('data-desk-entry'))openDesk(axoStream.chain||null);
   else if(button.hasAttribute('data-desk-more')){limit+=pageSize;paint();}
@@ -571,7 +655,10 @@
  const extra=axoExtraCards;
  axoExtraCards=function(){
   const cards=extra();
-  if(axoStream.type==='home')cards.push([id,shell(id,'Trading Desk','Five-chain pool research','<div data-trading-desk></div>','','axo-trading-desk')]);
+  if(axoStream.type==='home'){
+   cards.push([id,shell(id,'Trading Desk','Five-chain pool research','<div data-trading-desk></div>','','axo-trading-desk')],
+    [rotationId,shell(rotationId,'Chain Rotation','Short-term market breadth','<div data-chain-rotation></div>'+rotationMethod(),'','axo-chain-rotation')]);
+  }
   return cards;
  };
  const streamCards=axoStreamDataCards;
@@ -584,7 +671,7 @@
   return cards;
  };
  const visible=axoStreamCardVisible;
- axoStreamCardVisible=key=>key===id?axoStream.type==='home':visible(key);
+ axoStreamCardVisible=key=>key===id||key===rotationId?axoStream.type==='home':visible(key);
  const order=axoOrderCards;
  axoOrderCards=function(cards){
   if(axoChainScope()&&chView()==='overview'){
@@ -603,13 +690,15 @@
    return order(cards).sort((a,b)=>rank(a[0])-rank(b[0]));
   }
   if(axoStream.type!=='home')return order(cards);
-  const desk=cards.find(([key])=>key===id),ordered=order(cards.filter(([key])=>key!==id));
+  const desk=cards.find(([key])=>key===id),rotation=cards.find(([key])=>key===rotationId);
+  const leading=[desk,rotation].filter(card=>card&&!pins.includes(card[0]));
+  const ordered=order(cards.filter(card=>!leading.includes(card)));
   let shown=ordered;
   if(!showAll&&Date.now()>=manualUntil){
    let context=0;
    shown=ordered.filter(([key])=>pins.includes(key)||key.startsWith('request-')||key.startsWith('stream-data-attached-')||key==='stream-data-pulse'||key.startsWith('project-')||key==='stream-data-focus-more'||++context<=3);
   }
-  if(desk)shown.splice(shown.filter(([key])=>pins.includes(key)).length,0,desk);
+  shown.splice(shown.filter(([key])=>pins.includes(key)).length,0,...leading);
   return shown;
  };
  const entry=document.createElement('button');
