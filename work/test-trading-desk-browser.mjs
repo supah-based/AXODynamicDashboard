@@ -6,6 +6,7 @@ import Desk from './axo-trading-desk-model.cjs';
 
 const {chromium}=runtimeDependency('playwright');
 const html=await fs.readFile('outputs/axo-live-dashboard.html','utf8');
+const chainAppearance=JSON.parse(await fs.readFile('work/axo-chain-palette.json','utf8'));
 const backend=(await fs.readFile('work/axo-server.mjs','utf8'))+'\n'+await fs.readFile('work/axo-intelligence-runtime.mjs','utf8');
 const files=new Set(await fs.readdir('work'));
 const aliases=Object.fromEntries([...backend.matchAll(/['"](\/[\w-]+\.(?:js|css))['"]\s*:\s*['"]([\w.-]+)['"]/g)].map(m=>[m[1],m[2]]));
@@ -18,15 +19,17 @@ const names={solana:'Solana',base:'Base',bsc:'BNB Chain',robinhood:'Robinhood',a
 const data=Desk.CHAIN_IDS.map((chain,i)=>{
  const address=chain==='solana'?'1'.repeat(31)+'2':evm(20+i);
  const pair=chain==='solana'?'2'.repeat(31)+'3':evm(40+i,chain==='arc'?64:40);
+ const change1=[2.1,3.2,-8.7,4.1,5][i];
  return {
   id:chain+':'+pair,chain,address,pair,seenAt:at-30000,createdAt:at-5400000,provider:'GeckoTerminal',dex:'Fixture',
   name:names[chain]+' sample coin',symbol:'FIX'+(i+1),price:.025,marketCap:375000,fdv:990000,liquidity:51000,
-  volume5:900,volume1:5500+i*200,volume6:40000,volume24:100000,change1:5,change24:chain==='arc'?-20:13,changes:{m5:2,h1:5,h24:chain==='arc'?-20:13},
-  transactions:{m5:{buys:12,sells:7},h1:{buys:50,sells:26}},participants:{m5:{unique:11,buyers:8,sellers:6},h1:{unique:27}}
+  volume5:900,volume1:5500+i*200,volume6:40000,volume24:100000,change1,change24:chain==='arc'?-20:13,changes:{m5:2,h1:change1,h24:chain==='arc'?-20:13},
+  transactions:{m5:{buys:12,sells:7},h1:{buys:50,sells:26},h24:i===2?{buys:800,sells:null}:{buys:700+i*20,sells:560+i*50}},participants:{m5:{unique:11,buyers:8,sellers:6},h1:{unique:27}}
  };
 });
 const screening=createTradingDesk({
- getPools:()=>data,getChain:()=>({status:'available',sources:[{id:'top',provider:'GeckoTerminal',status:'available',fetchedAt:at-30000}]}),
+ getPools:()=>data,getChain:chain=>({status:'available',sources:[{id:'top',provider:'GeckoTerminal',status:'available',fetchedAt:at-30000}],
+  dex:{status:'live',source:'DefiLlama',receivedAt:at-30000,data:{volume:8250000,change:[5,12,-1.8,4.1,2][Desk.CHAIN_IDS.indexOf(chain)]}}}),
  getMarkets:()=>({status:'live',receivedAt:at,data:[{symbol:'btc',price:63000,change:-1,sourceTime:new Date(at-30000).toISOString()}]})
 });
 const browser=await chromium.launch({channel:process.env.AXO_BROWSER_CHANNEL||'chrome',headless:true});
@@ -45,7 +48,7 @@ try{
    if(body)return route.fulfill({body,contentType:'image/'+(assetType==='svg'?'svg+xml':assetType)});
   }
   if(path==='/api/trading-desk')return route.fulfill({json:screening.snapshot()});
-  if(path==='/api/dashboard')return route.fulfill({json:{version:3,chains:Desk.CHAIN_IDS.map(id=>({id,name:names[id]})),feeds:{},events:[],capabilities:{}}});
+  if(path==='/api/dashboard')return route.fulfill({json:{version:3,chains:Desk.CHAIN_IDS.map(id=>({id,name:names[id]})),chainAppearance,feeds:{},events:[],capabilities:{}}});
   if(path==='/api/stream-memory')return route.fulfill({json:{revision:0,shortcuts:[],tombstones:[],preferences:{},projects:[]}});
   if(path==='/api/project'){
    const {chain,address,pool}=Object.fromEntries(url.searchParams);
@@ -83,27 +86,72 @@ try{
  assert.equal(preflights.length,0);
  assert.equal(onchain.length,0);
  assert.equal(await view.locator('[data-desk-chain]').count(),6);
+ const signalCards=view.locator('[data-desk-signal-cards]');
+ await signalCards.getByText('250 buys').waitFor();
+ assert.match(await signalCards.innerText(),/5\/5 current pools with both metrics/);
+ assert.match(await signalCards.innerText(),/4 up · 1 down/);
+ assert.equal(await signalCards.getByRole('button',{name:/Inspect/}).first().getAttribute('aria-label'),'Inspect FIX3 on BNB Chain');
+ await signalCards.getByRole('button',{name:'Inspect FIX3 on BNB Chain'}).click();
+ await page.getByRole('heading',{name:'BNB Chain sample coin'}).waitFor();
+ await page.keyboard.press('Escape');
+ await signalCards.getByRole('button',{name:'24h',exact:true}).click();
+ await signalCards.getByText('24h trades · 4/5 current pools',{exact:true}).waitFor();
+ await signalCards.getByRole('button',{name:'1h',exact:true}).click();
+ await page.keyboard.press('/');
+ assert(await view.locator('[data-desk-query]').evaluate(el=>document.activeElement===el));
+ await view.locator('[data-desk-query]').fill(data[4].pair);
+ await view.getByText('1 matching pool in the sample',{exact:true}).waitFor();
+ assert.deepEqual(await page.evaluate(()=>axoDashboardReferences().projects.filter(x=>x.chain==='arc')), [{chain:'arc',address:data[4].address,pool:data[4].pair}]);
+ await view.locator('[data-desk-query]').fill('');
+ await view.getByText('5 matching pools in the sample',{exact:true}).waitFor();
+ const sort=view.locator('[data-desk-sort="change1"]');
+ await sort.click();
+ assert.equal(await sort.locator('..').getAttribute('aria-sort'),'descending');
+ assert.match(await rows.first().innerText(),/FIX5/);
+ await sort.click();
+ assert.equal(await sort.locator('..').getAttribute('aria-sort'),'ascending');
+ assert.match(await rows.first().innerText(),/FIX3/);
+ await sort.click();
+ assert.equal(await sort.locator('..').getAttribute('aria-sort'),null);
+ await page.evaluate(()=>document.activeElement.blur());
  const firstResultPositions=[];
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:844});
-  await page.evaluate(()=>{window.scrollTo({top:0,behavior:'instant'});layout();});
+  await page.evaluate(async()=>{window.scrollTo({top:0,behavior:'instant'});layout();await new Promise(requestAnimationFrame);});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
   const firstResult=await page.evaluate(()=>({
    pool:Math.round(document.querySelector('[data-desk-row]').getBoundingClientRect().top),
-   ask:Math.round(document.querySelector('#askForm').getBoundingClientRect().top)
+   end:Math.round(document.querySelector('[data-desk-row]').getBoundingClientRect().bottom),
+   ask:Math.round(innerHeight-parseFloat(getComputedStyle(document.body,'::after').height))
   }));
-  assert(firstResult.pool<firstResult.ask,'The first pool is visible above Ask Axo at '+width+'px');
-  firstResultPositions.push({width,firstResult:firstResult.pool});
-  if(width!==320)await page.screenshot({path:'outputs/axo-ux-'+(width===1440?'desktop':'mobile')+'.png',style:'#toast{visibility:hidden}'});
+  assert(firstResult.end<=firstResult.ask,'The full first pool is visible above Ask Axo at '+width+'px '+JSON.stringify(firstResult));
+  firstResultPositions.push({width,firstResult:firstResult.pool,resultEnd:firstResult.end,ask:firstResult.ask});
+  if(width!==320)await page.screenshot({path:'outputs/axo-streams-redesign-'+(width===1440?'desktop':'mobile')+'.png',style:'#toast{visibility:hidden}.card[data-axo-reading]{outline:none!important;box-shadow:none!important}'});
  }
+ await page.evaluate(()=>{document.documentElement.dataset.theme='light';layout();});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'The light theme fits at 320px');
+ const observationRows=await page.locator('.axo-token-observation').locator(':scope > *').evaluateAll(nodes=>nodes.map(el=>el.getBoundingClientRect().top));
+ assert.equal(observationRows.length,4);
+ assert(Math.max(...observationRows)-Math.min(...observationRows)<2,'All four AXO readings share one row on narrow screens');
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';layout();});
  const chainPicker=view.locator('[data-desk-chain-picker]');
  await chainPicker.selectOption('arc');
  assert.equal(await rows.count(),1);
+ assert.equal(await signalCards.isVisible(),false);
+ await view.locator('[data-desk-signals-toggle]').click();
+ await signalCards.getByText('50 buys').waitFor();
+ await signalCards.getByRole('button',{name:'5m',exact:true}).click();
+ await signalCards.getByText('12 buys').waitFor();
+ await signalCards.getByRole('button',{name:'1h',exact:true}).click();
+ await view.locator('[data-desk-signals-toggle]').click();
  await view.locator('[data-desk-filter-label]').click();
+ await view.locator('[data-desk-sort-picker]').selectOption('change1:asc');
+ assert.equal(await view.locator('[data-desk-sort-picker]').inputValue(),'change1:asc');
  await view.locator('[data-desk-liquidity]').selectOption('100000');
  await view.getByText(/Nothing meets this screen/).waitFor();
  await view.getByRole('button',{name:'Reset filters'}).click();
  await rows.first().waitFor();
+ assert.equal(await view.locator('[data-desk-sort-picker]').inputValue(),'');
  await view.locator('[data-desk-filter-label]').click();
  await chainPicker.selectOption('');
  await page.setViewportSize({width:1440,height:990});
@@ -131,6 +179,13 @@ try{
  assert.deepEqual(preflights,[exactArc,exactArc]);
  await dialog.getByText('Current entry and exit evidence unavailable').waitFor();
  await dialog.getByText('Contract & pool',{exact:true}).click();
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'https://axo-desk.test'});
+ await dialog.getByRole('button',{name:'Copy contract'}).click();
+ await dialog.getByText('Contract copied.').waitFor();
+ assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),exactArc.address);
+ await dialog.getByRole('button',{name:'Copy pool'}).click();
+ await dialog.getByText('Pool copied.').waitFor();
+ assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),exactArc.pool);
  await dialog.getByRole('button',{name:'Check on-chain facts'}).click();
  await dialog.getByText('Decimals 18 · Total issued supply 9000000000').waitFor();
  await dialog.getByText('Alchemy Token API · Arc sample coin · FIX5').waitFor();
@@ -153,10 +208,11 @@ try{
  await view.locator('[data-desk-mode="following"]').click();
  assert.equal(await rows.count(),1);
  assert.match(await rows.first().innerText(),/FIX5/);
+ assert.equal(await view.locator('[data-desk-ref]').count(),0,'Personal following rows stay out of the public dashboard references');
  await view.locator('[data-desk-query]').fill('nobody');
  await view.getByText('No rows match this search and the selected filters.').waitFor();
  assert.equal(await view.locator('[data-desk-query]').evaluate(node=>node===document.activeElement),true);
- await view.locator('[data-desk-query]').fill('');
+ await view.getByRole('button',{name:'Clear search'}).click();
  await rows.first().waitFor();
  await view.locator('[data-desk-mode="active"]').click();
  await view.locator('[data-desk-chain=""]').click();
@@ -239,8 +295,16 @@ try{
   for(const chain of Desk.CHAIN_IDS){
    await page.locator('[data-common-stream="'+chain+'"]').click();
    await page.locator('[data-card="stream-data-chain-'+chain+'-overview"]').waitFor();
+   const chainSignals=page.locator('[data-card="stream-data-chain-'+chain+'-market-signals"]');
+   await chainSignals.getByRole('heading',{name:'Flow pulse'}).waitFor();
+   await chainSignals.getByText(/up · .* down · .* with 1h change/).waitFor();
    assert.equal(new URL(page.url()).searchParams.get('chain'),chain);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,chain+' fits '+width+'px');
+   if(width===390&&chain==='arc'){
+    await chainSignals.getByRole('button',{name:'Inspect FIX5 on Arc'}).click();
+    await page.waitForFunction(()=>axoStream.type==='project'&&axoStreamProject?.symbol==='FIX5');
+    assert.deepEqual(await page.evaluate(()=>axoStream.project),exactArc);
+   }
   }
   for(const type of ['home','watchlist','discovery','launchpads','news','profile','portfolio','risk']){
    await page.evaluate(type=>{axoGoStream({type});layout();},type);
@@ -249,5 +313,5 @@ try{
  }
  assert.deepEqual(errors,[]);
  console.log('First result at an 844px viewport height',firstResultPositions);
- console.log('PASS Chrome Trading Desk and user journeys: first results, mobile filters, market context, exact evidence, follow and alert, swap review, browser history, chain and project links, Discovery filters, and private views.');
+ console.log('PASS Chrome Trading Desk and user journeys: market signals, exact pool search and copy, sorting, visible first results, mobile filters, project evidence, browser history and all five chain streams.');
 }finally{await browser.close();}

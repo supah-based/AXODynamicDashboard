@@ -4,8 +4,11 @@ const axoChainViews={overview:'Overview',leaders:'24h gainers',activity:'Trading
 const axoChains={data:new Map(),jobs:new Map(),errors:new Map(),research:null,seenAlerts:new Set(),page:0};
 const axoChainScope=()=>axoStream.type==='chain'&&Object.hasOwn(axoChainNames,axoStream.chain),chName=()=>axoChainNames[axoStream.chain],chData=()=>{const d=axoChains.data.get(axoStream.chain);return d?{...d,pools:Array.isArray(d.pools)?d.pools:[],launchpads:Array.isArray(d.launchpads)?d.launchpads:[],sources:Array.isArray(d.sources)?d.sources:[],news:{...(d.news||{}),items:Array.isArray(d.news?.items)?d.news.items:[]}}:d},chView=()=>axoStream.id||'overview',chId=k=>'stream-data-chain-'+axoStream.chain+'-'+k;
 const chNote=s=>'<p class="eco-note">'+esc(s)+'</p>',chMetric=ecoMetric,chLink=ecoLink,chBtn=(label,view)=>ecoBtn(label,'data-chain-view',view),chDate=ecoDate;
+function chInLens(p){
+ return p.chain===axoStream.chain&&(axoLens==='all'||axoLens==='trenches'&&p.createdAt&&Date.now()-p.createdAt<=604800000||axoLens==='swing'&&p.createdAt&&Date.now()-p.createdAt>2592000000&&p.liquidity>=1000000);
+}
 function chProjectRows(d=chData()){
- const m=new Map();for(const p of d?.pools||[]){const key=p.chain+':'+(p.chain==='solana'?p.address:p.address.toLowerCase()),old=m.get(key);if(!old||(p.liquidity??-1)>(old.liquidity??-1))m.set(key,p)}return [...m.values()].filter(p=>p.chain===axoStream.chain&&(axoLens==='all'||axoLens==='trenches'&&p.createdAt&&Date.now()-p.createdAt<=604800000||axoLens==='swing'&&p.createdAt&&Date.now()-p.createdAt>2592000000&&p.liquidity>=1000000));
+ const m=new Map();for(const p of d?.pools||[]){const key=p.chain+':'+(p.chain==='solana'?p.address:p.address.toLowerCase()),old=m.get(key);if(!old||(p.liquidity??-1)>(old.liquidity??-1))m.set(key,p)}return [...m.values()].filter(chInLens);
 }
 function chScreens(d=chData()){
  const rows=chProjectRows(d).filter(p=>d.status!=='stale'&&!p.curve&&p.observationStatus!=='stale'&&Date.now()-p.seenAt<=900000&&p.liquidity>=axoLiquidity),eligible=rows.filter(p=>p.liquidity>=Math.max(50000,axoLiquidity)&&p.volume24>=10000);

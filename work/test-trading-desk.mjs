@@ -58,6 +58,34 @@ assert.equal(Desk.select(d.rows,{mode:'following'},now,new Set([Desk.tokenKey(se
 assert.equal(Desk.select(d.rows,{screened:true,chain:'solana'},now).length,0);
 assert.equal(Desk.select(d.rows,{},now+300000).length,0,'A previously painted response cannot keep an expired market on the active screen');
 assert.deepEqual(Desk.select(d.rows,{query:all[0].address.replace(/1$/,'2')},now).map(r=>r.project.address),[],'Exact Solana case and bytes are preserved');
+assert.equal(Desk.select(d.rows,{query:dip.pair},now)[0].project.address,dip.address,'A pool address resolves the same exact token and pool');
+
+const signalRow=(project,fields={})=>({project,quality:'current',risk:{excluded:false},...fields});
+const strong=pool('base',7,{change1:22,transactions:{h1:{buys:20,sells:10}}});
+const weak=pool('arc',7,{change1:-29,volume24:null,transactions:{h1:{buys:15,sells:null}}});
+const quiet=pool('solana',7,{change1:0,volume24:0,transactions:{m5:{buys:0,sells:0},h1:{buys:0,sells:0}}});
+const unchecked=[
+ signalRow({...strong,pair:evm(777),seenAt:strong.seenAt-1000,transactions:{h1:{buys:200,sells:0}}}),
+ signalRow(pool('robinhood',7,{change1:300}),{risk:{excluded:true}}),
+ signalRow(pool('robinhood',8,{change1:360,seenAt:now-Desk.MARKET_MAX_AGE-1})),
+ signalRow(pool('bsc',7,{change1:-500}),{quality:'conflict'}),
+ signalRow(pool('bsc',8,{change1:-600,seenAt:now+1})),
+ signalRow(pool('arc',8,{change1:-650}),{outside:true})
+];
+const signalRows=[signalRow(strong),signalRow(weak),signalRow(quiet),...unchecked];
+const signals=Desk.signals(signalRows,now,'h1');
+assert.equal(signals.sampleSize,signalRows.length);
+assert.equal(signals.pools,3,'One current pool per token; conflict, severe, stale, future and unsampled rows are omitted');
+assert.deepEqual(signals.trades,{window:'h1',pools:2,buys:20,sells:10,buyShare:2/3});
+assert.deepEqual(signals.liquidity,{pools:2,usd:74000,volume24:100000});
+assert.deepEqual([signals.gainers,signals.losers,signals.withChange],[1,1,3]);
+assert.deepEqual(signals.movers.map(p=>Desk.poolKey(p)),[Desk.poolKey(weak),Desk.poolKey(strong)]);
+assert.deepEqual(Desk.signals(signalRows,now,'m5').trades,{window:'m5',pools:1,buys:0,sells:0,buyShare:null},'A complete zero window stays distinct from missing counts');
+assert.equal(Desk.signals(signalRows,now,'h24').trades.pools,0);
+assert.equal(Desk.signals(signalRows,now+Desk.MARKET_MAX_AGE+2,'h1').newestAt,null);
+const unsorted=[signalRow(strong),signalRow(weak),signalRow({...quiet,change1:null})];
+assert.deepEqual(Desk.select(unsorted,{sort:'change1',direction:'asc'},now).map(r=>r.project.change1),[-29,22,null]);
+assert.deepEqual(Desk.select(unsorted,{sort:'change1',direction:'desc'},now).map(r=>r.project.change1),[22,-29,null]);
 
 const raw=JSON.parse((await fs.readFile('work/chain-probe-base.json','utf8')).replaceAll('"base_0x','"arc_0x'));
 const tx=raw.data[0].attributes.transactions.m5;

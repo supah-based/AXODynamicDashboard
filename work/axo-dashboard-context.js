@@ -4,6 +4,11 @@ function axoDashboardReferences(){
  const cards=[...document.querySelectorAll('#board>[data-card]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').slice(0,24),projects=new Map(),researchKeys=[];
  const add=p=>{if(!p?.chain||!p.address||!p.pair||projects.size>=12)return;const ref={chain:p.chain,address:p.address,pool:p.pair};projects.set(JSON.stringify(ref),ref)};
  for(const el of cards){add(axoProjectMap.get(el.dataset.card));for(const row of el.querySelectorAll('[data-project-row]'))add(axoRowFind(row.dataset.projectRow));const r=[...axoResearchCards.values()].find(r=>r.id===el.dataset.card);if(r?.data?.key&&researchKeys.length<3)researchKeys.push(r.data.key)}
+ for(const row of document.querySelectorAll('#board [data-desk-ref]')){
+  if(projects.size>=12)break;
+  const {deskRef:chain,deskAddress:address,deskPool:pair}=row.dataset;
+  if(row.getClientRects().length)add({chain,address,pair});
+ }
  if(axoStream.type==='project')add(axoStreamProject);
  if(axoStream.type==='watchlist')for(const p of axoWatch.slice(0,12))add(p);
  return {version:1,capturedAt:Date.now(),cards:cards.map(e=>e.dataset.card),projects:[...projects.values()],researchKeys,loading:cards.some(e=>e.getAttribute('aria-busy')==='true')||(axoStream.type==='chain'&&axoChains.jobs.has(axoStream.chain))};
