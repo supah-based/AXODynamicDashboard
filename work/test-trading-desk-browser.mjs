@@ -39,9 +39,21 @@ try{
   if(path==='/')return route.fulfill({body:html,contentType:'text/html'});
   const file=asset(path);
   if(file)return route.fulfill({body:await fs.readFile('work/'+file),contentType:file.endsWith('.css')?'text/css':'text/javascript'});
+  const assetType=path.match(/^\/assets\/[a-z0-9_-]+\.(gif|png|webp|svg)$/i)?.[1];
+  if(assetType){
+   const body=await fs.readFile('outputs'+path).catch(()=>null);
+   if(body)return route.fulfill({body,contentType:'image/'+(assetType==='svg'?'svg+xml':assetType)});
+  }
   if(path==='/api/trading-desk')return route.fulfill({json:screening.snapshot()});
   if(path==='/api/dashboard')return route.fulfill({json:{version:3,chains:Desk.CHAIN_IDS.map(id=>({id,name:names[id]})),feeds:{},events:[],capabilities:{}}});
   if(path==='/api/stream-memory')return route.fulfill({json:{revision:0,shortcuts:[],tombstones:[],preferences:{},projects:[]}});
+  if(path==='/api/project'){
+   const {chain,address,pool}=Object.fromEntries(url.searchParams);
+   const p=data.find(p=>p.chain===chain&&p.address===address&&p.pair===pool);
+   if(!p)return route.fulfill({status:404,json:{error:'No exact fixture'}});
+   return route.fulfill({json:{project:{chain,address,pool},market:{status:'available',primary:p},pools:[p],identity:{name:p.name,symbol:p.symbol,links:[]},
+    onchain:{simulation:{status:'unavailable'}},enrichment:{gmgn:{status:'not_configured'}},receivedAt:at}});
+  }
   if(path==='/api/trading-desk/contract'){
    const identity=Object.fromEntries(url.searchParams);
    onchain.push(identity);
@@ -71,6 +83,35 @@ try{
  assert.equal(preflights.length,0);
  assert.equal(onchain.length,0);
  assert.equal(await view.locator('[data-desk-chain]').count(),6);
+ const firstResultPositions=[];
+ for(const width of [1440,390,320]){
+  await page.setViewportSize({width,height:844});
+  await page.evaluate(()=>{window.scrollTo({top:0,behavior:'instant'});layout();});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  const firstResult=await page.evaluate(()=>({
+   pool:Math.round(document.querySelector('[data-desk-row]').getBoundingClientRect().top),
+   ask:Math.round(document.querySelector('#askForm').getBoundingClientRect().top)
+  }));
+  assert(firstResult.pool<firstResult.ask,'The first pool is visible above Ask Axo at '+width+'px');
+  firstResultPositions.push({width,firstResult:firstResult.pool});
+  if(width!==320)await page.screenshot({path:'outputs/axo-ux-'+(width===1440?'desktop':'mobile')+'.png',style:'#toast{visibility:hidden}'});
+ }
+ const chainPicker=view.locator('[data-desk-chain-picker]');
+ await chainPicker.selectOption('arc');
+ assert.equal(await rows.count(),1);
+ await view.locator('[data-desk-filter-label]').click();
+ await view.locator('[data-desk-liquidity]').selectOption('100000');
+ await view.getByText(/Nothing meets this screen/).waitFor();
+ await view.getByRole('button',{name:'Reset filters'}).click();
+ await rows.first().waitFor();
+ await view.locator('[data-desk-filter-label]').click();
+ await chainPicker.selectOption('');
+ await page.setViewportSize({width:1440,height:990});
+ const context=page.locator('.axo-market-context.home > summary');
+ assert.equal(await page.locator('#axoFocus').isVisible(),false);
+ await context.click();
+ assert.equal(await page.locator('#axoFocus').isVisible(),true);
+ await context.click();
  await view.locator('[data-desk-pick]').nth(0).click();
  await view.locator('[data-desk-pick]').nth(1).click();
  await view.locator('[data-desk-compare]').click();
@@ -151,6 +192,62 @@ try{
  assert.notEqual(await ranking.locator('[data-chain-project]').first().getAttribute('data-chain-project'),before);
  await page.locator('[data-desk-entry]').click();
  await view.locator('[data-desk-chain="base"][aria-pressed="true"]').waitFor();
+ await page.goBack();
+ await ranking.waitFor();
+ assert.equal(new URL(page.url()).searchParams.get('section'),'leaders');
+ assert.equal(await page.locator('[data-common-stream="base"]').getAttribute('aria-current'),'page');
+ await page.reload({waitUntil:'load'});
+ assert.equal(await page.evaluate(()=>axoStream.id),'leaders');
+ await page.getByRole('button',{name:/Find stream/}).click();
+ await page.getByRole('searchbox',{name:'Search streams and saved shortcuts'}).fill('BSC');
+ await page.getByRole('button',{name:/BNB Chain market/}).last().click();
+ assert.equal(new URL(page.url()).searchParams.get('chain'),'bsc');
+ await page.getByRole('button',{name:'Back to previous stream',exact:true}).click();
+ await page.waitForURL(url=>url.searchParams.get('section')==='leaders');
+ await page.evaluate(()=>axoGoStream({type:'discovery',discovery:{chains:['arc'],liqMin:25000,mcMax:3000000}}));
+ assert.equal(new URL(page.url()).searchParams.get('stream'),'discovery');
+ await page.reload({waitUntil:'load'});
+ assert.deepEqual(await page.evaluate(()=>[axoStream.type,axoStream.discovery.chains,axoStream.discovery.liqMin,axoStream.discovery.mcMax]),['discovery',['arc'],25000,3000000]);
+ await page.evaluate(project=>axoGoStream({type:'project',chain:project.chain,project}),exactArc);
+ await page.waitForFunction(()=>axoStreamProject?.symbol==='FIX5');
+ const params=new URL(page.url()).searchParams;
+ assert.equal(params.get('pool'),exactArc.pool);
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'https://axo-desk.test'});
+ await page.getByRole('button',{name:'Copy stream link'}).click();
+ await page.waitForFunction(async()=>new URLSearchParams((await navigator.clipboard.readText()).split('?')[1]||'').get('stream')==='project');
+ const copied=new URL(await page.evaluate(()=>navigator.clipboard.readText()));
+ assert.equal(copied.searchParams.get('address'),exactArc.address);
+ assert.equal(copied.searchParams.get('pool'),exactArc.pool);
+ await page.reload({waitUntil:'load'});
+ await page.waitForFunction(()=>axoStreamProject?.symbol==='FIX5');
+ assert.deepEqual(await page.evaluate(()=>axoStream.project),exactArc);
+ await page.evaluate(()=>axoGoStream({type:'watchlist',id:'personal watch name'}));
+ assert.equal(await page.getByRole('button',{name:'Copy stream link'}).isVisible(),false);
+ assert.equal(new URL(page.url()).searchParams.has('stream'),false);
+ assert(!page.url().includes('personal'));
+ await page.goBack();
+ await page.waitForFunction(()=>axoStreamProject?.symbol==='FIX5');
+ await page.goForward();
+ await page.waitForFunction(()=>axoStream.type==='watchlist');
+ await page.evaluate(()=>axoGoStream({type:'launchpads',chain:'base',launchpadView:'graduating'}));
+ assert.equal(new URL(page.url()).searchParams.get('pad-view'),'graduating');
+ await page.evaluate(()=>axoGoStream({type:'chain',chain:'base'}));
+ await page.goBack();
+ await page.waitForFunction(()=>axoStream.type==='launchpads'&&axoStream.launchpadView==='graduating');
+ for(const width of [390,320]){
+  await page.setViewportSize({width,height:844});
+  for(const chain of Desk.CHAIN_IDS){
+   await page.locator('[data-common-stream="'+chain+'"]').click();
+   await page.locator('[data-card="stream-data-chain-'+chain+'-overview"]').waitFor();
+   assert.equal(new URL(page.url()).searchParams.get('chain'),chain);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,chain+' fits '+width+'px');
+  }
+  for(const type of ['home','watchlist','discovery','launchpads','news','profile','portfolio','risk']){
+   await page.evaluate(type=>{axoGoStream({type});layout();},type);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,type+' fits '+width+'px');
+  }
+ }
  assert.deepEqual(errors,[]);
- console.log('PASS Chrome Trading Desk filters, comparison, exact and expiring preflight, RPC facts, watchlist, alerts, swap review, paging, persistence and mobile layout.');
+ console.log('First result at an 844px viewport height',firstResultPositions);
+ console.log('PASS Chrome Trading Desk and user journeys: first results, mobile filters, market context, exact evidence, follow and alert, swap review, browser history, chain and project links, Discovery filters, and private views.');
 }finally{await browser.close();}

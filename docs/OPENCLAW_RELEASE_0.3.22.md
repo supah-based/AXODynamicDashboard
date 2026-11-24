@@ -12,6 +12,20 @@ The production audit on November 23, 2026 inspected release 0.3.21 on desktop an
 
 The desk's screens prioritize research observations. Holder concentration can include exchanges, burn accounts, pools, and locked tokens. A liquidity change in USD can include price movement. Token supply, contract bytecode, and RPC availability are separate from market depth, transfer permissions, and sellability.
 
+## Usability audit on November 24
+
+The public site still served 0.3.21. The updated dashboard was audited in Chrome with the application assets and dated fixtures. At a 390 px viewport width, the first pool row started about 1,250 px down the page. Opening a chain section left the URL unchanged, a reload returned to Market Home, and the chain shortcut lost its highlight inside the section.
+
+- Market Home brings the Trading Desk above the first scroll on desktop and mobile. Market context and the related screening tools sit under one disclosure. The phone layout has a chain picker, compact screen tabs, and a Filters panel with a reset. At 390 px the first pool row starts about 657 px down, and it fits above Ask Axo at 320, 390, and 1440 px in an 844 px high viewport.
+- Public chain and project routes, Discovery filters, and launchpad screens have shareable links. Reloading a project restores the exact chain, token, and pool. Browser Back and Forward return to the earlier stream, and chain shortcuts stay highlighted inside their sections. Private workspace views can be revisited with browser history while the page stays open. The stream finder accepts common chain names and tickers such as BSC.
+- The follow-up browser pass covered chain selection on all five chains at phone widths, as well as watchlist, Discovery, launchpads, news, profile, portfolio, and risk layouts. It also covers copy link, reload, browser history, pool comparison, follow, alert, and swap review.
+
+## Alchemy discovery fallback
+
+When new-pool coverage is thin, the collector can use the first Alchemy Trading API page as exact chain, token, and pool leads. It confirms the matching pool through DEX Screener before showing market values. Existing market sources are collected during preview outages. The preview key stays on the server and a rejected credential backs off for 30 minutes. The optional `AXO_ALCHEMY_TRADING_API_KEY` overrides the existing Alchemy server key for this feed. [Alchemy new pools](https://www.alchemy.com/docs/data/trading-api/endpoints/discovery/get-new-pools)
+
+The configured key returned HTTP 401 from the documented new-pool and screening routes and HTTP 200 from the Portfolio API. Preview authorization remains pending. Fixture tests verify the exact-pool match, credential privacy, continued public coverage after a rejection, and recovery when preview access becomes available.
+
 ## Validation and deployment
 
 - A live collector pass returned 112 fresh exact-token representatives, with complete five-minute trade counts on each chain. That sample included 20 on Solana, 29 on Base, 30 on BNB Chain, 24 on Robinhood, and 9 on Arc. Robinhood and Arc used fallback coverage and had no unique-trader figures in that pass. Arc's 32-byte candle validation passed with fixtures, and the live candle request was limited by provider cooldown.

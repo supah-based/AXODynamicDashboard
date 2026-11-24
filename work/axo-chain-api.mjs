@@ -37,7 +37,7 @@ export function chainScreens(pools,{now=Date.now(),minLiquidity=1000}={}){
  const rows=deepestProjects(pools).filter(p=>AxoStablecoins.isSuggestedProject(p)&&!p.curve&&p.observationStatus!=='stale'&&p.seenAt<=now&&now-p.seenAt<=15*60000&&p.liquidity>=minLiquidity),rankable=rows.filter(p=>p.liquidity>=Math.max(50000,minLiquidity)&&p.volume24>=10000);
  return {leaders:rankable.filter(p=>p.change24!==null&&p.change24>0).sort((a,b)=>b.change24-a.change24),activity:rankable.sort((a,b)=>b.volume24-a.volume24),new:rows.filter(p=>p.createdAt&&p.createdAt<=now&&now-p.createdAt<=7*DAY).sort((a,b)=>b.createdAt-a.createdAt),established:rows.filter(p=>p.createdAt&&now-p.createdAt>=30*DAY&&p.liquidity>=Math.max(100000,minLiquidity)&&p.volume24>=10000).sort((a,b)=>b.liquidity-a.liquidity)};
 }
-export function createChainApi({getState,getEcosystem,gecko=geckoPublic,dex=publicSources,getSeeds=()=>[],getCandidateSeeds=null,getNativeSeeds=null,refreshHead=null,cachePath=null,now=Date.now}={}){
+export function createChainApi({getState,getEcosystem,gecko=geckoPublic,dex=publicSources,getSeeds=()=>[],getCandidateSeeds=null,getNativeSeeds=null,getPreviewSeeds=null,refreshHead=null,cachePath=null,now=Date.now}={}){
  const snapshots=new Map(),jobs=new Map(),attempts=new Map(),rounds=new Map(),chainIds=Object.keys(CHAIN_NAMES);
  let loaded=null,writes=Promise.resolve(),nextChain=0;
  async function load(){if(loaded)return loaded;loaded=(async()=>{if(!cachePath)return;try{const saved=JSON.parse(await fs.readFile(cachePath,'utf8'));for(const [chain,d]of Object.entries(saved.snapshots||{})){if(!Object.hasOwn(CHAIN_NAMES,chain)||d.chain!==chain||!Number.isFinite(d.asOf)||d.asOf>now()||now()-d.asOf>7*86400000)continue;const pools=(d.pools||[]).filter(p=>p.chain===chain&&chainAddress(p.address,chain)&&chainAddress(p.pair,chain,true)&&p.seenAt>0&&p.seenAt<=now()).slice(0,240);snapshots.set(chain,{...d,pools})}}catch{}})();return loaded}
@@ -97,6 +97,8 @@ export function createChainApi({getState,getEcosystem,gecko=geckoPublic,dex=publ
   seeds.push(...getSeeds(chain));
   const results=[...primary],primaryRows=primary.flatMap(r=>r.rows);
   const currentTokens=new Set(primaryRows.filter(p=>p.observationStatus==='available'&&p.liquidity>0&&AxoStablecoins.isSuggestedProject(p)).map(p=>chain==='solana'?p.address:p.address.toLowerCase()));
+  const needsNewPools=currentTokens.size<12||primary.some(r=>r.source.id==='gecko-new'&&r.source.status!=='available');
+  const previewRead=getPreviewSeeds&&needsNewPools?Promise.resolve().then(()=>getPreviewSeeds(chain)).catch(()=>null):null;
   if(getNativeSeeds&&['arc','robinhood'].includes(chain)&&currentTokens.size<12){
    const native=await getNativeSeeds(chain,primaryRows).catch(()=>null);
    if(native){
@@ -115,13 +117,21 @@ export function createChainApi({getState,getEcosystem,gecko=geckoPublic,dex=publ
     seeds.push(...listed);
     candidates.push(...listed.filter(eligible));
    }
-   const addresses=[...new Set(candidates.map(p=>chain==='solana'?p.address:p.address.toLowerCase()))];
-   const batch=addresses.length?Array.from({length:Math.min(20,addresses.length)},(_,i)=>addresses[(round*11+i)%addresses.length]):[];
+   const norm=value=>chain==='solana'?value:value.toLowerCase();
+   const original=new Set(candidates.map(p=>norm(p.address)));
+   const addresses=[...original];
+   const rotated=addresses.length?Array.from({length:Math.min(20,addresses.length)},(_,i)=>addresses[(round*11+i)%addresses.length]):[];
+   const preview=await previewRead;
+   if(preview?.source)results.push({source:preview.source,rows:[]});
+   const previewSeeds=(preview?.seeds||[]).filter(p=>exactOn(p,chain)&&eligible(p));
+   const previewPairs=new Set(previewSeeds.map(p=>norm(p.address)+':'+norm(p.pair)));
+   const batch=[...new Set([...previewSeeds.map(p=>norm(p.address)),...rotated])].slice(0,20);
    const exact=(r,contracts)=>(Array.isArray(r.data)?r.data:r.data?.pairs||[]).flatMap(raw=>{
     if(raw.chainId!==chain||!chainAddress(raw.baseToken?.address,chain)||!chainAddress(raw.pairAddress,chain,true))return [];
-    if(contracts.length&&!contracts.some(a=>eq(a,raw.baseToken.address,chain)))return [];
+    const address=norm(raw.baseToken.address),discovered=previewPairs.has(address+':'+norm(raw.pairAddress));
+    if(contracts.length&&(!contracts.includes(address)||!original.has(address)&&!discovered))return [];
     return [{...normalizePair(raw,r.at),provider:'DEX Screener',curve:isLaunchCurveDex(raw.dexId),
-     sourceSample:contracts.length?'Exact-contract fallback':'Chain-matched public search fallback'}];
+     sourceSample:discovered?'Exact pool · Alchemy discovery':contracts.length?'Exact-contract fallback':'Chain-matched public search fallback'}];
    });
    const searches={bsc:'PancakeSwap',arc:'Arc',robinhood:'Robinhood'};
    const secondary=[];
@@ -129,7 +139,7 @@ export function createChainApi({getState,getEcosystem,gecko=geckoPublic,dex=publ
     const url='https://api.dexscreener.com/tokens/v1/'+chain+'/'+batch.join(',');
     secondary.push(readPoolSource('dex-exact','DEX Screener',url,u=>dex.get(u,{ttl:120000}),r=>exact(r,batch)));
    }
-   if(searches[chain]&&currentTokens.size+batch.length<6){
+   if(searches[chain]&&currentTokens.size+rotated.length<6){
     const url='https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(searches[chain]);
     secondary.push(readPoolSource('dex-search','DEX Screener',url,u=>dex.get(u,{ttl:120000}),r=>exact(r,[])));
    }

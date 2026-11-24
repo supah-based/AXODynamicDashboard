@@ -6,6 +6,7 @@ import {createChainApi,normalizeGecko} from './axo-chain-api.mjs';
 import {createSecurityApi} from './axo-security-api.mjs';
 import {createHistoryApi} from './axo-history-api.mjs';
 import {createChainRpc} from './axo-chain-rpc.mjs';
+import {createAlchemyPoolDiscovery} from './axo-alchemy-pool-discovery.mjs';
 import Assets from './axo-stablecoins.cjs';
 
 let now=Date.now();
@@ -86,10 +87,59 @@ const [a,b]=await Promise.all([chain.snapshot('arc'),chain.snapshot('arc')]);
 assert.deepEqual(a,b);assert.equal(primary,2);assert.equal(fallback,2);assert.equal(native,1);
 assert.equal(a.status,'partial');assert(a.pools.every(p=>p.address===marketSea.address||p.address===nativeRow.address));
 assert.equal(a.pools.find(p=>p.address===marketSea.address).seenAt,now-10000,'The newest exact DEX observation keeps its own fetch time');
+
+const previewKey='fixture-alchemy-trading-credential',newArc=pool('arc',8),previewRequests=[];
+let previewNow=now,previewDenied=false;
+const preview=createAlchemyPoolDiscovery({
+ apiKey:previewKey,now:()=>previewNow,fetchImpl:async (url,options)=>{
+  const u=new URL(url);
+  assert.equal(u.hostname,'api.g.alchemy.com');
+  assert.equal(u.pathname,'/trading/v1/'+previewKey+'/pools/new');
+  assert.equal(u.searchParams.get('pageSize'),'10');
+  assert.equal(options.redirect,'error');
+  const network=u.searchParams.get('network');
+  previewRequests.push(network);
+  if(previewDenied)return new Response(JSON.stringify({error:previewKey}),{status:401});
+  const row={network:'arc-mainnet',tokenAddress:newArc.address,poolAddress:newArc.pair,createdAt:new Date(newArc.createdAt).toISOString(),
+   priceUsd:'1000',liquidityUsd:'500000',volumeUsd:'200000',buys:12,sells:14};
+  return new Response(JSON.stringify({pageKey:null,data:[
+   row,row,{...row,network:'base-mainnet'}, {...row,poolAddress:'0x1'},{...row,createdAt:new Date(previewNow+60000).toISOString()}
+  ]}));
+ }
+});
+const previewDiscovery=await preview.discover('arc');
+assert.equal(previewDiscovery.source.returned,1);
+assert.equal(previewDiscovery.seeds[0].pair,newArc.pair);
+assert.equal(Object.hasOwn(previewDiscovery.seeds[0],'price'),false);
+assert(!JSON.stringify(previewDiscovery).includes(previewKey));
+
+const previewChain=createChainApi({
+ now:()=>previewNow,getState:()=>({feeds:{}}),getPreviewSeeds:preview.discover,
+ gecko:{get:async()=>{throw Error('provider cooldown');}},
+ dex:{get:async url=>{
+  if(new URL(url).searchParams.has('q'))return {at:previewNow,data:{pairs:[]}};
+  assert.equal(new URL(url).pathname,'/tokens/v1/arc/'+newArc.address);
+  return {at:previewNow,data:[toDs({...newArc,pair:dip.pair}),toDs({...newArc,chain:'base'}),toDs(newArc)]};
+ }}
+});
+const previewSnapshot=await previewChain.snapshot('arc');
+assert.equal(previewSnapshot.pools.length,1);
+assert.equal(previewSnapshot.pools[0].pair,newArc.pair);
+assert.equal(previewSnapshot.pools[0].price,newArc.price,'Market values belong to the exact DEX observation');
+assert.match(previewSnapshot.pools[0].sourceSample,/Alchemy discovery/);
+assert.deepEqual(previewRequests,['arc-mainnet']);
+assert(!JSON.stringify(previewSnapshot).includes(previewKey));
+
+previewNow+=1000;
+previewDenied=true;
+const denied=await preview.discover('base');
+assert.equal(denied.source.httpStatus,401);
+assert(!JSON.stringify(denied).includes(previewKey));
+
 const bnbSeed=pool('bsc',8);
 let bnbSeedReads=0,bnbPoolReads=0;
 const coldChain=createChainApi({
- now:()=>now,getState:()=>({feeds:{}}),
+ now:()=>now,getState:()=>({feeds:{}}),getPreviewSeeds:preview.discover,
  getCandidateSeeds:async chain=>{assert.equal(chain,'bsc');bnbSeedReads++;return [bnbSeed,{...marketSea,seenAt:now}];},
  gecko:{get:async()=>{throw Error('provider cooldown');}},
  dex:{get:async url=>{
@@ -104,6 +154,11 @@ assert.equal(bnbSeedReads,1);
 assert.equal(bnbPoolReads,1);
 assert.deepEqual(bnbSnapshot.pools.map(p=>p.address),[bnbSeed.address]);
 assert.equal(bnbSnapshot.status,'partial');
+assert.equal(bnbSnapshot.sources.find(s=>s.id==='alchemy-new').status,'unavailable');
+assert.deepEqual(previewRequests,['arc-mainnet','base-mainnet'],'A rejected preview key backs off across chains');
+previewNow+=1800001;
+previewDenied=false;
+assert.equal((await preview.discover('arc')).source.status,'available','A later grant of preview access is detected after the cooldown');
 
 const key='fixture-credentials-for-test';
 const rpcCalls=[];

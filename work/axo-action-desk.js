@@ -61,8 +61,10 @@
    const status=fresh?c.current+' current':c.observedAt?'Sample dated':'No current sample';
    return '<button type="button" class="axo-desk-chain" data-desk-chain="'+esc(c.chain)+'" aria-pressed="'+selected+'" title="'+esc('DEX volume 24h change · '+(volume?.source||'unavailable')+' · '+status)+'"><span>'+esc(c.name)+'</span>'+spread+'<small>'+esc(status)+'</small></button>';
   });
+  const chainOptions=sample.chains.map(c=>'<option value="'+esc(c.chain)+'" '+(filters.chain===c.chain?'selected':'')+'>'+esc(c.name)+'</option>').join('');
   return '<div class="axo-desk-marketline">'+bitcoin+'<span><small>Chain DEX volume change · 24h</small></span><button class="btn" type="button" data-desk-open="news">News &amp; narratives</button></div><div class="axo-desk-chains" role="group" aria-label="Trading Desk chain">'+
-   '<button type="button" class="axo-desk-chain all" data-desk-chain="" aria-pressed="'+!filters.chain+'"><span>All chains</span><small>'+sample.chains.filter(c=>Desk.fresh(c.observedAt,Date.now())).length+' / 5 current</small></button>'+networks.join('')+'</div>';
+   '<button type="button" class="axo-desk-chain all" data-desk-chain="" aria-pressed="'+!filters.chain+'"><span>All chains</span><small>'+sample.chains.filter(c=>Desk.fresh(c.observedAt,Date.now())).length+' / 5 current</small></button>'+networks.join('')+'</div>'+
+   '<label class="axo-desk-chain-picker">Chain <select data-desk-chain-picker><option value="">All chains</option>'+chainOptions+'</select></label>';
  }
  function currentBadge(row){
   const risk=row.risk;
@@ -151,21 +153,25 @@
   return '<div data-desk-market></div><div class="axo-desk-filters"><div class="axo-desk-modes" role="group" aria-label="Project screen">'+
    Object.entries(Desk.MODES).map(([key,m])=>'<button class="btn" type="button" data-desk-mode="'+key+'">'+esc(m.label)+'</button>').join('')+
    '</div><div class="axo-desk-filter-row"><label class="axo-desk-search"><span>Search sample</span><input type="search" data-desk-query maxlength="120" placeholder="Ticker, name or contract" autocomplete="off"></label>'+
-   '<label data-desk-threshold><span>Min. liquidity</span><select data-desk-liquidity>'+Desk.LIQUIDITY.map(x=>'<option value="'+x+'">'+esc(money(x))+'</option>').join('')+'</select></label>'+
-   '<label data-desk-threshold title="Select Any cap to include pools without a reported circulating market cap."><span>Max. market cap</span><select data-desk-cap>'+Desk.CAPS.map(x=>'<option value="'+(x??'')+'">'+esc(x===null?'Any cap':money(x))+'</option>').join('')+'</select></label>'+
-   '<label class="axo-desk-screened" data-desk-threshold><input type="checkbox" data-desk-screened> Core checks only</label></div></div>'+
+   '<details class="axo-desk-filter-menu" data-desk-threshold><summary class="btn" data-desk-filter-label>Filters</summary><div class="axo-desk-filter-options">'+
+   '<label><span>Min. liquidity</span><select data-desk-liquidity>'+Desk.LIQUIDITY.map(x=>'<option value="'+x+'">'+esc(money(x))+'</option>').join('')+'</select></label>'+
+   '<label title="Select Any cap to include pools without a reported circulating market cap."><span>Max. market cap</span><select data-desk-cap>'+Desk.CAPS.map(x=>'<option value="'+(x??'')+'">'+esc(x===null?'Any cap':money(x))+'</option>').join('')+'</select></label>'+
+   '<label class="axo-desk-screened"><input type="checkbox" data-desk-screened> Core checks only</label>'+
+   '<button class="btn" type="button" data-desk-reset>Reset filters</button></div></details></div></div>'+
    '<div class="axo-desk-result-bar"><div><strong data-desk-result-count aria-live="polite"></strong><small data-desk-description></small></div><div class="axo-desk-micro-actions"><button type="button" class="btn" data-desk-search-all hidden>Search more pools</button><button type="button" class="btn" data-desk-compare disabled>Compare</button><button type="button" class="btn" data-desk-refresh>Refresh</button></div></div>'+
    '<p class="axo-desk-error" data-desk-error role="status" hidden></p><div data-desk-results></div>'+
    '<div class="axo-desk-footer"><details><summary>Coverage &amp; method</summary><div data-desk-coverage></div></details><details><summary>Recent changes</summary><ul data-desk-changes></ul><button class="btn" type="button" data-desk-open="changes">All changes</button></details>'+
-   '<button class="btn" type="button" data-desk-open="launchpads">Launchpads &amp; graduations</button><button class="btn" type="button" data-desk-open="paper">Paper trading</button><button class="btn" type="button" data-desk-context>Show market context</button></div>';
+   '<button class="btn" type="button" data-desk-open="launchpads">Launchpads &amp; graduations</button><button class="btn" type="button" data-desk-open="paper">Paper trading</button><button class="btn" type="button" data-desk-context>More dashboard cards</button></div>';
  }
  function patchContent(node,markup){
   if(painted.get(node)===markup)return;
   const focus=document.activeElement;
   const chain=focus&&node.contains(focus)?focus.dataset.deskChain:undefined;
+  const editingChain=focus?.matches('[data-desk-chain-picker]')&&node.contains(focus);
   node.innerHTML=markup;
   painted.set(node,markup);
   if(chain!==undefined)[...node.querySelectorAll('[data-desk-chain]')].find(b=>b.dataset.deskChain===chain)?.focus({preventScroll:true});
+  if(editingChain)node.querySelector('[data-desk-chain-picker]')?.focus({preventScroll:true});
  }
  function paint(){
   const view=root();
@@ -183,15 +189,18 @@
   view.querySelector('[data-desk-cap]').value=String(filters.maxCap??'');
   view.querySelector('[data-desk-screened]').checked=filters.screened;
   for(const label of view.querySelectorAll('[data-desk-threshold]'))label.hidden=filters.mode==='following';
+  const defaults=Desk.criteria(),overrides=['liquidity','maxCap','screened'].filter(key=>defaults[key]!==filters[key]).length;
+  view.querySelector('[data-desk-filter-label]').textContent='Filters'+(overrides?' ('+overrides+')':'');
+  view.querySelector('[data-desk-reset]').disabled=!overrides;
   view.querySelector('[data-desk-description]').textContent=Desk.MODES[filters.mode].description;
   const compare=view.querySelector('[data-desk-compare]');
-  compare.disabled=picked.size<2;compare.textContent='Compare'+(picked.size?' ('+picked.size+')':'');
+  compare.hidden=!picked.size;compare.disabled=picked.size<2;compare.textContent='Compare'+(picked.size?' ('+picked.size+')':'');
   view.querySelector('[data-desk-search-all]').hidden=!filters.query;
   view.querySelector('[data-desk-refresh]').disabled=loading;
   const failure=view.querySelector('[data-desk-error]');failure.hidden=!error||!sample;failure.textContent=error;
   patchContent(view.querySelector('[data-desk-coverage]'),coverage());
   patchContent(view.querySelector('[data-desk-changes]'),recentChanges()||'<li>No dated changes in this sample yet.</li>');
-  view.querySelector('[data-desk-context]').textContent=showAll?'Focus on Trading Desk':'Show market context';
+  view.querySelector('[data-desk-context]').textContent=showAll?'Fewer dashboard cards':'More dashboard cards';
   paintTable(view);
  }
 
@@ -368,6 +377,7 @@
  });
  document.addEventListener('change',event=>{
   const el=event.target;
+  if(el.matches('[data-desk-chain-picker]'))setFilters({chain:el.value||null});
   if(el.matches('[data-desk-liquidity]'))setFilters({liquidity:Number(el.value)});
   if(el.matches('[data-desk-cap]'))setFilters({maxCap:el.value?Number(el.value):null});
   if(el.matches('[data-desk-screened]'))setFilters({screened:el.checked});
@@ -376,6 +386,10 @@
   const button=event.target.closest('button');
   if(!button)return;
   if(button.hasAttribute('data-desk-mode'))setFilters({mode:button.dataset.deskMode});
+  else if(button.hasAttribute('data-desk-reset')){
+   const {liquidity,maxCap,screened}=Desk.criteria();
+   setFilters({liquidity,maxCap,screened});
+  }
   else if(button.hasAttribute('data-desk-chain'))setFilters({chain:button.dataset.deskChain||null});
   else if(button.hasAttribute('data-desk-entry'))openDesk(axoStream.chain||null);
   else if(button.hasAttribute('data-desk-more')){limit+=pageSize;paint();}

@@ -12,6 +12,7 @@ import {createCoordination,coordinationTransport} from './axo-builder-coordinati
 import {createReleaseMetadata} from './axo-release.mjs';
 import {createTradingDesk} from './axo-trading-desk.mjs';
 import {createChainRpc} from './axo-chain-rpc.mjs';
+import {createAlchemyPoolDiscovery} from './axo-alchemy-pool-discovery.mjs';
 import {createIntelligenceRuntime} from './axo-intelligence-runtime.mjs';
 import Registry from './axo-action-registry.cjs';
 import {isAxoOrigin,isAxoHost} from './axo-request-origin.mjs';
@@ -107,12 +108,14 @@ const ecosystemApi=createEcosystemApi({holderCachePath:path.join(runtimeRoot,'ax
 const publicHeader=createPublicHeaderCache({load:createHeaderLoader({publicRewards:publicRewardsReader})});
 const projectProfiles=createProjectProfiles({getPools:()=>['solana','base','bsc','robinhood','arc'].flatMap(c=>chainApi.local(c).pools||[]),getState:()=>state,officialPagePath:path.join(root,'work','axo-profile-page.html'),store:durable});
 const nativeLaunchpads=createDirectLaunchpadFeeds({bitqueryToken:process.env.AXO_BITQUERY_ACCESS_TOKEN||null});
-const chainRpc=createChainRpc({apiKey:process.env.AXO_ALCHEMY_API_KEY||process.env.ALCHEMY_API_KEY||null});
+const alchemyKey=process.env.AXO_ALCHEMY_API_KEY||process.env.ALCHEMY_API_KEY||null;
+const chainRpc=createChainRpc({apiKey:alchemyKey});
+const alchemyDiscovery=createAlchemyPoolDiscovery({apiKey:process.env.AXO_ALCHEMY_TRADING_API_KEY||alchemyKey});
 const chainApi=createChainApi({
  cachePath:path.join(runtimeRoot,'axo-chain-snapshots.json'),getState:()=>state,getEcosystem:()=>ecosystemApi.latest(),
  getSeeds:chain=>[...(launchpadApi.local(chain).projects||[]),...(state.feeds.launches?.data?.items||[]),...(discoveryMemory?.snapshot().projects||[])],
  getCandidateSeeds:async chain=>(await candidateFeed.collect()).items.filter(p=>p.chain===chain),
- getNativeSeeds:(chain,pools)=>nativeLaunchpads.collect(chain,{pools}),refreshHead:chainRpc.head
+ getNativeSeeds:(chain,pools)=>nativeLaunchpads.collect(chain,{pools}),getPreviewSeeds:alchemyDiscovery.discover,refreshHead:chainRpc.head
 });
 const launchpadApi=createLaunchpadApi({direct:nativeLaunchpads,chains:chainApi,getEcosystem:()=>ecosystemApi.snapshot(),cachePath:path.join(runtimeRoot,'axo-launchpad-history.json')});
 const projectScreens=createProjectScreens({chains:chainApi,getState:()=>state,remember:pools=>discoveryMemory.ingest(pools)});
