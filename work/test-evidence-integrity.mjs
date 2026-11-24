@@ -12,6 +12,24 @@ import {publicProject} from './axo-answer-context.mjs';
 let at=Date.now();const initial=at,address='0x'+'1'.repeat(40),pair='0x'+'2'.repeat(40),p={id:'integrity-fixture',chain:'base',address,pair,provider:'Fixture provider',seenAt:at,price:1,marketCap:1000000,liquidity:100000,volume5:1000,volume1:6500,volume24:30000,transactions:{m5:{buys:15,sells:5},h1:{buys:40,sells:20}}};
 const risk=project=>({chain:project.chain,address:project.address,status:'available',source:'GoPlus',receivedAt:at,checks:['is_honeypot','cannot_sell_all','owner_change_balance'].map(key=>({key,value:'0'}))});
 assert.equal(Intel.brief(p,{risk:{status:'screened'},now:at}).state,'investigate');
+const alternate={...p,pair:'0x'+'a'.repeat(40),price:1.2,liquidity:30000,seenAt:at-30000};
+const slower={...p,pair:'0x'+'b'.repeat(40),price:1.4,seenAt:at-90000};
+const stale={...p,pair:'0x'+'c'.repeat(40),price:1.5,liquidity:2000000,seenAt:at-360000};
+const inconsistent={...p,pair:'0x'+'d'.repeat(40),price:1.35,volume5:8000,seenAt:at-20000};
+const venues=Intel.projectVenues([
+ {...p,price:3,seenAt:at-1},
+ alternate,{...alternate,pair:'0x'+alternate.pair.slice(2).toUpperCase(),price:8,seenAt:at-350000},
+ slower,stale,inconsistent,{...alternate,address:'0x'+'9'.repeat(40)},{...alternate,chain:'bsc'},
+ {...p,pair:'0x'+'e'.repeat(40),seenAt:at+1}
+],p,at);
+assert.deepEqual(venues.map(r=>[r.pool.pair,r.status,r.current]),[
+ [pair,'current',true],[slower.pair,'current',false],[alternate.pair,'current',false],[stale.pair,'stale',false],[inconsistent.pair,'inconsistent',false]
+]);
+assert.equal(venues[0].pool.price,1,'The selected pool remains the exact reference');
+assert.equal(venues[1].difference,null);
+assert.equal(Math.round(venues[2].difference),20);
+assert.equal(venues[3].difference,null);
+assert.equal(venues[4].difference,null);
 for(const bad of [{...p,transactions:{m5:{buys:20,sells:0},h1:{buys:10,sells:50}}},{...p,volume5:8000},{...p,transactions:{m5:{buys:80,sells:30},h1:{buys:10,sells:5}}},{...p,volume1:Infinity},{...p,transactions:{m5:{buys:1.5,sells:2}}},{...p,buys:40.5},{...p,buys:80}]){
  assert.equal(Intel.quality(bad,at).status,'inconsistent');assert.equal(Intel.brief(bad,{risk:{status:'screened'},now:at}).state,'check-data');assert.equal(Intel.brief(bad,{risk:{status:'screened'},now:at}).signals.length,0);
  assert.equal(publicRibbon({pools:[bad],risk,now:at}).projects.length,0);const book=createObservationBook({now:()=>at});assert.equal(book.observe(bad).status,'unavailable');assert.equal(book.status().snapshots,0);

@@ -36,7 +36,7 @@
  const pack=axoPackDense;axoPackDense=function(items,count,g){return pack(items,count,g,layoutDepth?reservations:[]);};
  const baseLayout=layout;layout=function(...args){
   if(layoutDepth)return baseLayout(...args);sync();if(!locks.size)return baseLayout(...args);
-  pending=true;const b=board.getBoundingClientRect(),count=Math.max(1,Math.min(5,Math.floor((board.clientWidth+gap)/294))),cw=(board.clientWidth-gap*(count-1))/count;
+  pending=true;const b=board.getBoundingClientRect(),count=axoBoardColumns(board.clientWidth,gap),cw=(board.clientWidth-gap*(count-1))/count;
   reservations=[...locks].map(([el,s])=>{const x=s.pageX-scrollX-b.left,y=s.pageY-scrollY-b.top,col=Math.max(0,Math.min(count-1,Math.floor((x+.1)/(cw+gap)))),end=Math.max(col+1,Math.min(count,Math.ceil((x+s.width-.1)/(cw+gap))));return {el,col,span:end-col,y,height:el.offsetHeight,x,width:s.width};});
   layoutDepth++;try{baseLayout(...args);for(const r of reservations){r.el.style.width=r.width+'px';r.el.style.transform='translate('+r.x+'px,'+r.y+'px)';r.el.dataset.axoReading='true';}board.style.height=Math.max(minHeight,parseFloat(board.style.height)||0,...reservations.map(r=>r.y+r.el.offsetHeight))+'px';
    // A decorative filler never occupies a held card's real, possibly fractional footprint.
@@ -56,6 +56,12 @@
  board.addEventListener('toggle',sync,true);document.addEventListener('dragstart',reset,true);document.addEventListener('dragend',()=>{reset();requestAnimationFrame(()=>{sync();render(true);});},true);
  window.addEventListener('blur',()=>{setPointer(null);touch=null;sync();});
  window.addEventListener('scroll',()=>{if(touch){const r=touch.getBoundingClientRect();if(r.bottom<=28||r.top>=innerHeight){touch=null;sync();}}},{passive:true});
- let width=board.clientWidth;window.addEventListener('resize',()=>{if(Math.abs(board.clientWidth-width)>1){width=board.clientWidth;reset();suppressed.add(card(document.activeElement));layout();requestAnimationFrame(()=>{suppressed.clear();sync();});}});
+ let width=board.clientWidth;
+ const boardResize=new ResizeObserver(()=>{
+  if(Math.abs(board.clientWidth-width)<=1)return;
+  width=board.clientWidth;reset();suppressed.add(card(document.activeElement));layout();
+  requestAnimationFrame(()=>{suppressed.clear();sync();});
+ });
+ boardResize.observe(board);
  const css=document.createElement('style');css.textContent='#board{overflow-anchor:none}html[data-theme] body #board>.card[data-axo-reading="true"]{transition:none!important;animation:none!important;outline:1px solid color-mix(in srgb,var(--axo-reading-lime,#86b83f) 80%,transparent);outline-offset:1px;box-shadow:0 0 12px color-mix(in srgb,var(--axo-reading-lime,#86b83f) 22%,transparent)}';document.head.append(css);scope=currentScope();
 })();

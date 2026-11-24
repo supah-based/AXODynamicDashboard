@@ -99,14 +99,122 @@ axoStreamStyle.textContent+=`html[data-theme] body .axo-stream-data-card{padding
 
 function axoSaveStreamPanel(){open('<h2 id="drawerTitle">Save this live stream</h2><p>Stores the stream scope, filters, research lens and chart interval. Results are evaluated again from current feeds when reopened.</p><form id="axoSaveStreamForm" class="axo-stream-form"><label for="axoStreamName">Shortcut name</label><input id="axoStreamName" maxlength="40" required value="'+esc(axoStreamTitle())+'"><button class="btn primary" type="submit">Save</button></form>');$('axoSaveStreamForm').onsubmit=e=>{e.preventDefault();const name=$('axoStreamName').value.trim();if(!name)return;axoShortcuts.push({id:'stream-'+Date.now(),name:name.slice(0,40),updatedAt:Date.now(),stream:axoCaptureStream()});if(axoPersistShortcuts()){axoRenderShortcuts();close();toast('Saved live stream: '+name+'.')}}}
 function axoManageStreams(){open('<h2 id="drawerTitle">Streams & saved shortcuts</h2>'+axoMoreStreamsMarkup()+'<h3>Saved live streams</h3><p>Stored in this browser and, when available, its private server workspace. Each shortcut runs against current data.</p>'+axoShortcuts.map(s=>'<div class="panel axo-stream-form"><input aria-label="Shortcut name" maxlength="40" data-stream-name="'+esc(s.id)+'" value="'+esc(s.name)+'"><button class="btn" data-stream-rename="'+esc(s.id)+'">Rename</button><button class="btn" data-stream-remove="'+esc(s.id)+'">Remove</button></div>').join('')+(!axoShortcuts.length?'<p>No streams saved yet.</p>':''))}
-let axoStreamProject=null,axoStreamResearch=null,axoChartData=null,axoProjectLoading=false,axoChartLoading=false;const axoChartCache=new Map();
+let axoStreamProject=null,axoStreamResearch=null,axoChartData=null,axoProjectLoading=false,axoChartLoading=false,axoChartRequest=0,axoChartCursor=null;const axoChartCache=new Map();
 const axoStreamIdentity=()=>JSON.stringify(axoStream.project||null);
 async function axoLoadStreamProject(quiet=false){const identity=axoStreamIdentity(),p=axoStream.project;if(!p)return;axoProjectLoading=true;axoRenderStream();try{const d=await window.AxoResearchAdapter.project(p);if(identity!==axoStreamIdentity())return;axoStreamResearch=d;axoStreamProject=d.pools?.find(x=>x.chain===p.chain&&x.address===p.address&&x.pair===p.pool)||null;if(!axoStreamProject)throw new Error('The selected exact pool is no longer returned. No alternate pool was selected.');axoProjectMap.set('project-'+axoStreamProject.id,axoStreamProject);axoLoadStreamChart(quiet)}catch(e){if(identity===axoStreamIdentity()){axoStreamResearch={error:e.message};if(!quiet)toast(e.message,'error')}}finally{if(identity===axoStreamIdentity()){axoProjectLoading=false;axoRenderStream()}}}
-async function axoLoadStreamChart(quiet=false){const identity=axoStreamIdentity(),p=axoStream.project,frame=axoStream.timeframe,key=identity+frame;if(!p)return;const cached=axoChartCache.get(key);if(cached&&Date.now()-cached.fetched<120000){axoChartData=cached;axoRenderStream();return}axoChartLoading=true;axoChartData=null;axoRenderStream();try{const r=await fetch('/api/ohlcv?'+new URLSearchParams({...p,timeframe:frame})),d=await r.json();if(identity!==axoStreamIdentity()||frame!==axoStream.timeframe)return;axoChartData={...d,fetched:Date.now()};axoChartCache.set(key,axoChartData);if(!quiet&&d.status!=='available')toast(d.reason||'Chart history unavailable.','error')}catch{if(identity===axoStreamIdentity()&&frame===axoStream.timeframe){axoChartData={status:'unavailable',reason:'Chart provider could not be reached.'};if(!quiet)toast(axoChartData.reason,'error')}}finally{if(identity===axoStreamIdentity()&&frame===axoStream.timeframe){axoChartLoading=false;axoRenderStream()}}}
-function axoCandleSvg(d){if(!d?.candles?.length)return '';const chartCard=document.querySelector('[data-card="stream-data-project-chart"]'),w=Math.max(260,Math.min(1200,(chartCard?.clientWidth||Math.min(innerWidth-26,600))-24)),h=Math.max(210,Math.min(300,Math.round(w*.4))),rows=d.candles,left=60,right=15,top=15,bottom=38,low=Math.min(...rows.map(r=>r[3])),high=Math.max(...rows.map(r=>r[2])),span=high-low||high*.01||1,min=rows[0][0],max=rows.at(-1)[0]+d.bucketSeconds,x=t=>left+(t-min)/(max-min)*(w-left-right),y=v=>top+(high-v)/span*(h-top-bottom),cw=Math.max(1,Math.min(14,d.bucketSeconds/(max-min)*(w-left-right)*.65));let svg='<svg class="axo-candles" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Actual '+esc(d.timeframe)+' OHLCV candles in USD, UTC. Focus a candle for values.">';for(let i=0;i<=4;i++){const v=low+span*i/4,yy=y(v);svg+='<line x1="'+left+'" x2="'+(w-right)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--ax-divider)"/><text x="'+(left-7)+'" y="'+(yy+3)+'" text-anchor="end" fill="var(--ax-muted)" font-size="10">'+esc(price(v))+'</text>'}rows.forEach((r,i)=>{const xx=x(r[0])+cw/2,color=r[4]>=r[1]?'var(--ax-green)':'var(--ax-red)',tip=new Date(r[0]*1000).toISOString()+' · O '+price(r[1])+' H '+price(r[2])+' L '+price(r[3])+' C '+price(r[4])+' · volume '+fmt(r[5])+(r[6]?' · '+r[6]+' observed days':'');svg+='<g tabindex="0" data-candle="'+i+'" aria-label="'+esc(tip)+'"><title>'+esc(tip)+'</title><rect x="'+(xx-cw/2-2)+'" y="'+top+'" width="'+(cw+4)+'" height="'+(h-top-bottom)+'" fill="transparent"/><line x1="'+xx+'" x2="'+xx+'" y1="'+y(r[2])+'" y2="'+y(r[3])+'" stroke="'+color+'"/><rect x="'+(xx-cw/2)+'" y="'+Math.min(y(r[1]),y(r[4]))+'" width="'+cw+'" height="'+Math.max(1,Math.abs(y(r[1])-y(r[4])))+'" fill="'+color+'"/></g>'});for(const t of [min,(min+max)/2,max-d.bucketSeconds])svg+='<text x="'+x(t)+'" y="'+(h-10)+'" text-anchor="middle" fill="var(--ax-muted)" font-size="10">'+new Date(t*1000).toISOString().slice(5,16).replace('T',' ')+'</text>';return svg+'</svg>'}
+function axoChartMatches(d,p,frame){
+ const interval={'15m':900,'1h':3600,'1d':86400,'1w':604800}[frame];
+ const rows=d?.candles;
+ return d?.chain===p.chain&&axoRowEq(d.address,p.address,p.chain)&&axoRowEq(d.pool,p.pool,p.chain)&&
+  d.timeframe===frame&&d.currency==='USD'&&d.bucketSeconds===interval&&Array.isArray(rows)&&rows.length>0&&
+  rows.every((r,i)=>Array.isArray(r)&&r.length>=6&&Number.isSafeInteger(r[0])&&r[0]>0&&r[0]<=Math.floor(Date.now()/1000)&&
+   (!i||r[0]>rows[i-1][0])&&r.slice(1,6).every(Number.isFinite)&&r[3]>0&&r[2]>=Math.max(r[1],r[4])&&r[3]<=Math.min(r[1],r[4])&&r[5]>=0);
+}
+async function axoLoadStreamChart(quiet=false){
+ const identity=axoStreamIdentity(),p=axoStream.project,frame=axoStream.timeframe,key=identity+frame;
+ if(!p)return;
+ const request=++axoChartRequest,active=()=>request===axoChartRequest&&identity===axoStreamIdentity()&&frame===axoStream.timeframe;
+ const cached=axoChartCache.get(key);
+ if(cached&&Date.now()-cached.fetched<120000){axoChartData=cached;axoChartLoading=false;axoRenderStream();return;}
+ axoChartLoading=true;axoChartData=null;axoRenderStream();
+ try{
+  const response=await fetch('/api/ohlcv?'+new URLSearchParams({...p,timeframe:frame}));
+  if(!response.ok)throw new Error('Chart provider could not be reached.');
+  const data=await response.json();
+  if(!active())return;
+  if(data.status==='available'&&!axoChartMatches(data,p,frame))throw new Error('Chart evidence could not be matched to this pool and timeframe.');
+  axoChartData={...data,fetched:Date.now()};
+  if(data.status==='available'){
+   axoChartCache.set(key,axoChartData);
+   if(axoChartCache.size>40)axoChartCache.delete(axoChartCache.keys().next().value);
+  }else if(!quiet)toast(data.reason||'Chart history unavailable.','error');
+ }catch(error){
+  if(active()){axoChartData={status:'unavailable',reason:error.message||'Chart history unavailable.'};if(!quiet)toast(axoChartData.reason,'error');}
+ }finally{if(active()){axoChartLoading=false;axoRenderStream();}}
+}
+function axoCandleIndex(data){
+ const key=axoStreamIdentity()+data.timeframe;
+ const index=key===axoChartCursor?.key?data.candles.findIndex(row=>row[0]===axoChartCursor.time):-1;
+ return index>=0?index:data.candles.length-1;
+}
+function axoCandleLabel(row){
+ return new Date(row[0]*1000).toISOString()+' · O '+price(row[1])+' H '+price(row[2])+' L '+price(row[3])+' C '+price(row[4])+' · volume '+fmt(row[5])+(row[6]?' · '+row[6]+' observed days':'');
+}
+function axoCandleReadout(row){
+ const iso=new Date(row[0]*1000).toISOString();
+ return '<time datetime="'+iso+'">'+iso.slice(5,16).replace('T',' ')+' UTC</time>'+
+  [['O',row[1]],['H',row[2]],['L',row[3]],['C',row[4]],['Vol',row[5]]].map(([label,value])=>'<span>'+label+' <b>'+esc(label==='Vol'?fmt(value):price(value))+'</b></span>').join('')+
+  (row[6]?'<span>'+esc(row[6])+' observed days</span>':'');
+}
+function axoSelectCandle(card,index,focus=false){
+ const d=axoChartData,row=d?.candles?.[index],candle=card?.querySelector('[data-candle="'+index+'"]');
+ if(!row||!candle)return;
+ axoChartCursor={key:axoStreamIdentity()+d.timeframe,time:row[0]};
+ const previous=card.querySelector('[data-candle][aria-current="true"]');
+ if(previous!==candle){
+  if(previous){previous.setAttribute('aria-current','false');previous.setAttribute('tabindex','-1');}
+  candle.setAttribute('aria-current','true');candle.setAttribute('tabindex','0');
+  const detail=card.querySelector('.axo-candle-detail');
+  if(detail)detail.innerHTML=axoCandleReadout(row);
+  card.querySelector('[data-candle-step="-1"]')?.setAttribute('aria-disabled',String(index===0));
+  card.querySelector('[data-candle-step="1"]')?.setAttribute('aria-disabled',String(index===d.candles.length-1));
+ }
+ if(focus)candle.focus({preventScroll:true});
+}
+function axoCandleSvg(d){
+ if(!d?.candles?.length)return '';
+ const chart=document.querySelector('[data-card="stream-data-project-chart"]');
+ const w=Math.max(250,Math.min(1200,(chart?.clientWidth||Math.min(innerWidth-26,600))-24));
+ const h=Math.max(195,Math.min(290,Math.round(w*.43))),left=w<400?55:67,right=13,top=14,bottom=28,rows=d.candles;
+ const observedLow=Math.min(...rows.map(r=>r[3])),observedHigh=Math.max(...rows.map(r=>r[2]));
+ const padding=observedHigh===observedLow?Math.max(observedHigh*.005,Number.MIN_VALUE):0;
+ const low=Math.max(0,observedLow-padding),high=observedHigh+padding,span=high-low;
+ const min=rows[0][0],max=rows.at(-1)[0]+d.bucketSeconds,plotWidth=w-left-right,cw=Math.max(1,Math.min(14,d.bucketSeconds/(max-min)*plotWidth*.65));
+ const x=t=>left+(t-min)/(max-min)*plotWidth,y=v=>top+(high-v)/span*(h-top-bottom);
+ const selected=axoCandleIndex(d);
+ let svg='<svg class="axo-candles" viewBox="0 0 '+w+' '+h+'" role="group" aria-label="'+esc(d.timeframe)+' USD candles. Use Left and Right to read candles." >';
+ for(let i=0;i<=4;i++){
+  const value=low+span*i/4,yy=y(value);
+  const label=value<.00001?'$'+value.toExponential(2):price(value);
+  svg+='<line x1="'+left+'" x2="'+(w-right)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--ax-divider)"/><text x="'+(left-6)+'" y="'+(yy+3)+'" text-anchor="end" fill="var(--ax-muted)" font-size="10">'+esc(label)+'</text>';
+ }
+ for(const [i,row]of rows.entries()){
+  const xx=x(row[0]+d.bucketSeconds/2),color=row[4]>=row[1]?'var(--ax-green)':'var(--ax-red)',label=esc(axoCandleLabel(row));
+  const half=d.bucketSeconds/(max-min)*plotWidth/2;
+  svg+='<g tabindex="'+(i===selected?0:-1)+'" data-candle="'+i+'" aria-current="'+(i===selected)+'" aria-label="'+label+'"><title>'+label+'</title>'+
+   '<rect class="axo-candle-hit" x="'+(xx-half)+'" y="'+top+'" width="'+(half*2)+'" height="'+(h-top-bottom)+'" fill="transparent"/>'+
+   '<line class="axo-candle-cursor" x1="'+xx+'" x2="'+xx+'" y1="'+top+'" y2="'+(h-bottom)+'"/>'+
+   '<line x1="'+xx+'" x2="'+xx+'" y1="'+y(row[2])+'" y2="'+y(row[3])+'" stroke="'+color+'"/>'+
+   '<rect x="'+(xx-cw/2)+'" y="'+Math.min(y(row[1]),y(row[4]))+'" width="'+cw+'" height="'+Math.max(1,Math.abs(y(row[1])-y(row[4])))+'" fill="'+color+'"/></g>';
+ }
+ const ticks=rows.length===1?[[min,'start']]:[[min,'start'],[rows.at(-1)[0],'end']];
+ if(w>420&&rows.length>2)ticks.splice(1,0,[rows[Math.floor(rows.length/2)][0],'middle']);
+ for(const [time,align]of ticks){
+  const at=align==='end'?w-right:x(time);
+  svg+='<text x="'+at+'" y="'+(h-8)+'" text-anchor="'+align+'" fill="var(--ax-muted)" font-size="10">'+new Date(time*1000).toISOString().slice(5,16).replace('T',' ')+'</text>';
+ }
+ return svg+'</svg>';
+}
+function axoProjectChartMarkup(){
+ const controls='<div class="axo-chart-heading"><h3>Price history</h3><div class="axo-chart-frames" role="group" aria-label="Candle interval">'+
+  ['15m','1h','1d','1w'].map(id=>'<button type="button" class="btn '+(axoStream.timeframe===id?'soft':'')+'" data-stream-frame="'+id+'" aria-pressed="'+(axoStream.timeframe===id)+'">'+id+'</button>').join('')+'</div></div>';
+ let result;
+ const d=axoChartData;
+ if(axoChartLoading)result='<p>Loading exact-pool candles…</p>';
+ else if(d?.status==='available'){
+  const index=axoCandleIndex(d);
+  result=axoCandleSvg(d)+'<div class="axo-candle-controls">'+
+   '<button type="button" class="btn" data-candle-step="-1" aria-label="Previous candle" aria-disabled="'+(index===0)+'">‹</button>'+
+   '<output class="axo-candle-detail">'+axoCandleReadout(d.candles[index])+'</output>'+
+   '<button type="button" class="btn" data-candle-step="1" aria-label="Next candle" aria-disabled="'+(index===d.candles.length-1)+'">›</button></div>'+
+   '<div class="axo-chart-source"><span>Exact pool · USD · UTC</span>'+(d.url?'<a href="'+safe(d.url)+'" target="_blank" rel="noopener noreferrer">GeckoTerminal ↗</a>':'')+
+   (d.notes?'<details class="axo-chart-method"><summary>Chart method</summary><p>'+esc(d.notes)+'</p></details>':'')+'</div>';
+ }else result='<p class="small">'+esc(d?.reason||'History loads after the exact pool is verified.')+'</p>';
+ return '<div class="axo-stream-box axo-project-chart">'+controls+'<div class="axo-chart-result" aria-live="polite">'+result+'</div></div>';
+}
 function axoProjectStreamMarkup(){const p=axoStreamProject,d=axoStreamResearch,anchor=axoStream.project;let html='<div class="axo-stream-grid"><div class="axo-stream-box"><h3>'+esc(p?.name||'Exact project research')+'</h3><p class="axo-project-address">'+esc(anchor.chain)+' · token '+esc(anchor.address)+'<br>Pool '+esc(anchor.pool)+'</p><p class="mini">'+(axoProjectLoading?'Refreshing exact pool…':d?.receivedAt?'Fetched '+age(d.receivedAt):'Awaiting source')+'</p><button class="btn" data-stream-project-refresh>Refresh</button>'+(p?' <button class="btn" data-watch="'+esc(p.id)+'">'+(axoWatch.some(x=>axoProjectKey(x)===axoProjectKey(p))?'✓ Watching':'＋ Watch')+'</button> <button class="btn" data-project-alert>Price alert</button>':'')+(d?.error?'<p class="small">'+esc(d.error)+'</p>':'')+'</div>';
  if(p){html+='<div class="axo-stream-box"><h3>Market observations</h3>'+axoRailLine('Price · USD',price(p.price))+axoRailLine('Pool liquidity',fmt(p.liquidity))+axoRailLine('Volume · 1h / 24h',fmt(p.volume1)+' / '+fmt(p.volume24))+axoRailLine('1h change',pct(p.change1))+axoRailLine('Buys / sells · 1h',p.buys+' / '+p.sells)+'<p class="mini">'+esc(p.provider||'DEX Screener')+' · '+esc(p.dex)+' · observed '+age(p.seenAt)+'. Transactions are not unique traders.</p></div><div class="axo-stream-box"><h3>Evidence & interpretation</h3><p class="small">'+(p.liquidity>0&&p.volume1!==null?'Hourly volume is '+(p.volume1/p.liquidity).toFixed(2)+'× pool liquidity. This describes turnover, not executable depth or expected return.':'Turnover cannot be calculated from current evidence.')+'</p><p class="small">'+(p.createdAt?'Pool age: '+age(p.createdAt)+'. Pool creation is not necessarily project launch.':'Pool creation time unavailable.')+'</p><p class="small">Project-linked news, the scoped X sample and linked code have separate dated cards. Public contract, holder and creator coverage varies by chain.</p><button class="btn" data-pc-security="'+esc(p.id)+'">Inspect contract &amp; holders</button></div><div class="axo-stream-box"><h3>Provider-listed links</h3>'+(typeof axoProjectHeaderMarkup==='function'?axoProjectHeaderMarkup(p):'')+'<p class="mini">Provider-listed leads; ownership is not independently verified.</p></div>'}
- html+='<div class="axo-stream-box axo-project-chart"><div class="row spread wrap"><h3>Price history · exact pool · USD</h3><div class="row">'+[['15m','15m'],['1h','Hourly'],['1d','Daily'],['1w','Weekly']].map(([id,label])=>'<button class="btn '+(axoStream.timeframe===id?'soft':'')+'" data-stream-frame="'+id+'" aria-pressed="'+(axoStream.timeframe===id)+'">'+label+'</button>').join('')+'</div></div>'+'<div class="axo-chart-result" aria-live="polite">'+(axoChartLoading?'<p>Loading real trading candles…</p>':axoChartData?.status==='available'?axoCandleSvg(axoChartData)+'<div class="axo-candle-detail">Hover or focus a candle for OHLC and volume.</div><p class="mini">'+esc(axoChartData.notes)+' Range: '+new Date(axoChartData.range[0]*1000).toISOString().slice(0,10)+' – '+new Date(axoChartData.range[1]*1000).toISOString().slice(0,10)+'. <a href="'+safe(axoChartData.url)+'" target="_blank" rel="noopener noreferrer">GeckoTerminal ↗</a></p>':'<p class="small">'+esc(axoChartData?.reason||'History loads after the exact pool is verified.')+'</p>')+'</div></div>';
+ html+=axoProjectChartMarkup();
  if(p){const pool=[...(feed('launches').data?.items||[]),...axoWatch,...requests.flatMap(r=>r.items||[])],seen=new Set();const similar=pool.filter(x=>AxoStablecoins.isSuggestedProject(x)&&(typeof axoRiskAllowed!=='function'||axoRiskAllowed(x))&&x.seenAt&&Date.now()-x.seenAt<=900000&&x.observationStatus!=='stale'&&x.chain===p.chain&&x.address!==p.address&&!seen.has(x.address)&&seen.add(x.address)&&x.liquidity>=p.liquidity/5&&x.liquidity<=p.liquidity*5).sort((a,b)=>Math.abs(a.liquidity-p.liquidity)-Math.abs(b.liquidity-p.liquidity)).slice(0,4);html+='<div class="axo-stream-box axo-project-chart"><h3>Comparable projects · observable criteria</h3>'+(similar.length?similar.map(x=>{axoProjectMap.set('project-'+x.id,x);return axoProjectRow(x,{reason:'Same chain · liquidity within 0.2–5× selected pool'})}).join(' '):'<p class="small">No comparable project in the current sample.</p>')+'<p class="mini">Same chain and liquidity within 0.2–5× this pool. Not a claim of shared narrative, quality, or investment suitability.</p></div>'}
  return html+'</div>';
 }
@@ -116,7 +224,23 @@ function axoOpenProjectStream(p){if(!p?.pair){toast('An exact pool is required t
 document.addEventListener('click',e=>{if(e.target.closest('[data-open-metric]')&&axoStream.type!=='home')axoGoStream(axoStreamTarget('home',{chain:null}),false)},true);
 document.addEventListener('click',e=>{if(e.target.closest('[data-project-dashboard]')&&modalOpen)close();if(e.target.closest('[data-chain]')&&axoStream.type!=='home'&&!(axoStream.type==='launchpad'&&/^pump[.\s-]*fun$/i.test(axoStream.id))){axoStream=axoNormalizeStream({...axoCaptureStream(),type:selected.length===1?'chain':'home',chain:selected.length===1?selected[0]:null});render(true)}});
 document.addEventListener('click',e=>{let b;if(e.target.closest('[data-stream-home]')){axoGoStream({type:'home',filters:{liquidity:axoLiquidity,lens:axoLens,sensitivity:axoSensitivity,chains:[]}});return}if(e.target.closest('[data-stream-back]')){const previous=axoStreamBack.pop();if(previous)axoGoStream(previous,false);return}if((b=e.target.closest('[data-stream-chain]'))){axoGoStream(axoStreamTarget('chain',{chain:b.dataset.streamChain}));return}if(e.target.closest('[data-stream-pads]')){axoGoStream(axoStreamTarget('launchpads'));return}if((b=e.target.closest('[data-stream-pad]'))){axoGoStream(axoStreamTarget('launchpad',{id:b.dataset.streamPad}));return}if((b=e.target.closest('[data-stream-narrative]'))){axoGoStream(axoStreamTarget('narrative',{id:b.dataset.streamNarrative}));return}if((b=e.target.closest('[data-stream-shortcut]'))){const saved=axoShortcuts.find(s=>s.id===b.dataset.streamShortcut);if(saved)axoGoStream(saved.stream);return}if(e.target.closest('[data-stream-save]'))axoSaveStreamPanel();if(e.target.closest('[data-stream-manage]'))axoManageStreams();if((b=e.target.closest('[data-stream-rename]'))){const s=axoShortcuts.find(s=>s.id===b.dataset.streamRename),input=[...document.querySelectorAll('[data-stream-name]')].find(x=>x.dataset.streamName===s?.id);if(s&&input?.value.trim()){s.name=input.value.trim().slice(0,40);s.updatedAt=Date.now();if(axoPersistShortcuts()){axoRenderShortcuts();toast('Stream shortcut renamed.')}}}if((b=e.target.closest('[data-stream-remove]'))){const removed=axoShortcuts.find(s=>s.id===b.dataset.streamRemove);axoShortcuts=axoShortcuts.filter(s=>s.id!==b.dataset.streamRemove);if(removed)axoShortcutTombstones=[...axoShortcutTombstones.filter(t=>t.id!==removed.id),{id:removed.id,deletedAt:Date.now()}].slice(-128);if(axoPersistShortcuts()){axoRenderShortcuts();axoManageStreams();toast('Stream shortcut removed.')}}if((b=e.target.closest('[data-memory-open]'))){const [chain,address,pool]=b.dataset.memoryOpen.split('|');axoGoStream(axoStreamTarget('project',{chain,project:{chain,address,pool}}));return}if((b=e.target.closest('[data-project-dashboard]'))){const p=axoProjectMap.get('project-'+b.dataset.projectDashboard);if(p)axoOpenProjectStream(p)}if((b=e.target.closest('[data-stream-frame]'))){axoStream.timeframe=b.dataset.streamFrame;axoLoadStreamChart()}if(e.target.closest('[data-stream-project-refresh]'))axoLoadStreamProject();});
-for(const event of ['pointerover','focusin'])document.addEventListener(event,e=>{const candle=e.target.closest('.axo-stream-data-card [data-candle]'),detail=candle?.closest('.axo-stream-data-card').querySelector('.axo-candle-detail');if(candle&&detail)detail.textContent=candle.getAttribute('aria-label')});
+for(const event of ['pointerover','focusin','click'])document.addEventListener(event,e=>{
+ const chart=e.target.closest('[data-card="stream-data-project-chart"]');
+ const candle=chart&&e.target.closest('[data-candle]');
+ if(candle)axoSelectCandle(chart,Number(candle.dataset.candle));
+ const step=event==='click'&&chart&&e.target.closest('[data-candle-step]');
+ if(step&&step.getAttribute('aria-disabled')!=='true'&&axoChartData?.candles){
+  axoSelectCandle(chart,axoCandleIndex(axoChartData)+Number(step.dataset.candleStep));
+ }
+});
+document.addEventListener('keydown',e=>{
+ const candle=e.target.closest('[data-card="stream-data-project-chart"] [data-candle]');
+ if(!candle||!axoChartData?.candles||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+ const index=Number(candle.dataset.candle),last=axoChartData.candles.length-1;
+ const next=e.key==='Home'?0:e.key==='End'?last:index+(e.key==='ArrowLeft'?-1:1);
+ e.preventDefault();
+ axoSelectCandle(candle.closest('[data-card="stream-data-project-chart"]'),Math.max(0,Math.min(last,next)),true);
+});
 // Local profile is not an authenticated/shared identity. Wallet remains rightmost.
 const axoProfileButton=document.createElement('button');axoProfileButton.type='button';axoProfileButton.className='btn';axoProfileButton.innerHTML='<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="10" cy="6" r="3"/><path d="M3 18v-2a7 7 0 0 1 14 0v2"/></svg>';axoProfileButton.setAttribute('aria-label','Local profile and preferences');axoProfileButton.title='Local profile';document.querySelector('.header-actions').append(axoProfileButton,$('walletButton'));
 axoProfileButton.onclick=()=>open('<h2 id="drawerTitle">Your local profile</h2><p>Preferences belong to this browser. No shared account or public identity is created.</p><div class="panel">'+axoRailLine('Saved live streams',axoShortcuts.length)+axoRailLine('Watched projects',axoWatch.length)+axoRailLine('Kept metrics',axoSavedMetrics.length)+axoRailLine('Preference learning',learning?'On':'Off')+'<button class="btn" id="axoProfileLearning">Toggle learning</button> <button class="btn" data-stream-manage>Manage streams</button> <button class="btn" id="axoWatchButtonProfile">Watchlist & alerts</button></div><p class="small">Axo uses the local Codex provider. Wallet approval remains separate.</p>');

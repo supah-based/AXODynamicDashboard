@@ -40,7 +40,7 @@ axoProjectCard=function(p){
 // Reconcile matching controls instead of discarding focused buttons on every feed update.
 window.axoPatchProjectCard=function(target,fresh){
  const key=n=>n.nodeType===1?(n.getAttribute('data-pc-key')||['data-pc-period','data-project-dashboard','data-expand','data-watch','data-pc-alert','data-save-metric','data-pin','data-hide'].map(k=>n.hasAttribute(k)?k+':'+n.getAttribute(k):'').find(Boolean)||''):'';
- function patch(a,b){if(a.nodeType!==b.nodeType||a.nodeName!==b.nodeName){a.replaceWith(b.cloneNode(true));return}if(a.nodeType===3){if(a.nodeValue!==b.nodeValue)a.nodeValue=b.nodeValue;return}if(a.nodeType!==1)return;for(const attr of [...a.attributes])if(!b.hasAttribute(attr.name)&&!['style'].includes(attr.name))a.removeAttribute(attr.name);for(const attr of [...b.attributes])if(a.getAttribute(attr.name)!==attr.value)a.setAttribute(attr.name,attr.value);const desired=[...b.childNodes];for(let i=0;i<desired.length;i++){const next=desired[i],k=key(next);let old=a.childNodes[i];if(k&&key(old||{})!==k){const found=[...a.childNodes].find(n=>key(n)===k);if(found){a.insertBefore(found,old||null);old=found}else{a.insertBefore(next.cloneNode(true),old||null);continue}}if(!old)a.appendChild(next.cloneNode(true));else patch(old,next)}while(a.childNodes.length>desired.length)a.lastChild.remove()}
+ function patch(a,b){if(a.nodeType!==b.nodeType||a.nodeName!==b.nodeName){a.replaceWith(b.cloneNode(true));return}if(a.nodeType===3){if(a.nodeValue!==b.nodeValue)a.nodeValue=b.nodeValue;return}if(a.nodeType!==1)return;for(const attr of [...a.attributes])if(!b.hasAttribute(attr.name)&&attr.name!=='style'&&!(a.matches('details.axo-project-depth')&&attr.name==='open'))a.removeAttribute(attr.name);for(const attr of [...b.attributes])if(a.getAttribute(attr.name)!==attr.value)a.setAttribute(attr.name,attr.value);const desired=[...b.childNodes];for(let i=0;i<desired.length;i++){const next=desired[i],k=key(next);let old=a.childNodes[i];if(k&&key(old||{})!==k){const found=[...a.childNodes].find(n=>key(n)===k);if(found){a.insertBefore(found,old||null);old=found}else{a.insertBefore(next.cloneNode(true),old||null);continue}}if(!old)a.appendChild(next.cloneNode(true));else patch(old,next)}while(a.childNodes.length>desired.length)a.lastChild.remove()}
  patch(target,fresh);
 };
 function axoCardRefresh(p){const current=axoProjectMap.get('project-'+p.id);if(current&&(current.chain!==p.chain||current.address!==p.address))return;const el=[...$('board').children].find(e=>e.dataset.card==='project-'+p.id);if(!el)return;const h=axoProjectCard(p),t=document.createElement('template');t.innerHTML=h;if(window.axoPatchProjectCard(el,t.content.firstElementChild)!==false)rendered.set('project-'+p.id,h);layout()}
@@ -55,17 +55,28 @@ setInterval(axoRefreshVisibleMini,30000);document.addEventListener('visibilitych
 const axoCardRenderBase=render;render=function(force=false){axoCardRenderBase(force);axoObserveMini()};
 // Keep natural card heights. The previous row-justification stretched short
 // project cards to match unrelated tall panels, undoing the compact design.
+function axoBoardColumns(width,gap){
+ if(axoStream.type==='project'&&width>=1260)return 5;
+ return Math.max(1,Math.min(5,Math.floor((width+gap)/294)));
+}
 layout=function(){
  const board=$('board'),gap=12,width=board.clientWidth;
  if(width<=0)return;
- const columns=Math.max(1,Math.min(5,Math.floor((width+gap)/294))),columnWidth=(width-gap*(columns-1))/columns;
- const fullWidth=['stream-data-discovery-comparison','stream-data-project-dexchart','stream-data-action-desk'];
+ const columns=axoBoardColumns(width,gap),columnWidth=(width-gap*(columns-1))/columns;
+ const fullWidth=['stream-data-discovery-comparison','stream-data-project-dexchart','stream-data-project-venues','stream-data-action-desk'];
  const wide=['stream-data-discovery','stream-data-watch-overview','stream-data-rebound-research','stream-data-bounce-board','axo-education',
   'brief','chainvolume','news-radar','stream-data-project-chart','stream-data-momentum-board','stream-data-activity-map','stream-data-axo-history','stream-data-axo-pool-chart','stream-data-hatchery-list'];
  const items=[...board.children].map(el=>{
   const id=el.dataset.card;
   const wideCard=wide.includes(id)||/^stream-data-chain-[a-z]+-market-signals$/.test(id)||axoExpanded.has(id);
-  const span=fullWidth.includes(id)?columns:wideCard?Math.min(2,columns):1;
+  let span=fullWidth.includes(id)?columns:wideCard?Math.min(2,columns):1;
+  if(axoStream.type==='project'){
+   const anchorSpan=columns<=2?columns:columns===3?1:2;
+   if(el.classList.contains('axo-project-anchor'))span=axoExpanded.has(id)?columns:anchorSpan;
+   if(id==='stream-data-project-chart')span=columns<=2?columns:columns-anchorSpan;
+   if(columns===5&&id==='stream-data-project-brief')span=2;
+   if(columns===5&&id==='stream-data-risk-project')span=3;
+  }
   el.style.minHeight='';
   el.classList.toggle('wide-card',span===2);
   el.style.width=(columnWidth*span+gap*(span-1))+'px';

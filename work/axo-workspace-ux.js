@@ -1,6 +1,6 @@
 /* Task-focused navigation and local filters. No new data requests or trading actions. */
 (function(){
- const focusDeck=$('axoFocus');let query='',watchMode='all',owner='',undo=null,undoTimer=0,searchTimer=0,projectFrame=0;
+ const focusDeck=$('axoFocus');let query='',watchMode='all',owner='',undo=null,undoTimer=0,searchTimer=0,projectFrame=0,projectScope='',projectSection=null;
  const ownerKey=()=>axoUserKey()+':'+axoUserGeneration;
  function userScope(){const next=ownerKey();if(next!==owner){owner=next;query='';watchMode='all';undo=null;clearTimeout(undoTimer);clearTimeout(searchTimer);const field=focusDeck.querySelector('[data-watch-query]');if(field){field.value='';delete field.dataset.userEdited;}}return next;}
  userScope();
@@ -16,16 +16,59 @@
   const area=focusDeck.querySelector('.axo-watch-undo'),undoHtml=undo&&undo.owner===owner&&undo.expires>Date.now()?'<span>Removed '+esc(undo.p.symbol||undo.p.name||'project')+'.</span> <button class="btn" data-watch-undo>Undo removal</button>':'';const undoKey=undoHtml?undo.owner+':'+undo.p.chain+':'+undo.p.address+':'+undo.expires:'';if(area.dataset.undoKey!==undoKey){area.innerHTML=undoHtml;area.dataset.undoKey=undoKey;}
  }
  function projectCards(){return [...$('board').children].filter(el=>el.matches('.card[data-card]')).map(el=>({id:el.dataset.card,title:el.querySelector('h2,h3')?.textContent?.trim()||titles[el.dataset.card]||'Project details',el}));}
- function jump(id){if(axoStream.type!=='project')return;const target=projectCards().find(c=>c.id===id);if(!target){toast('That section is not available yet.');return;}layout();const heading=target.el.querySelector('h2,h3')||target.el;heading.tabIndex=-1;heading.focus({preventScroll:true});window.scrollTo({top:Math.max(0,target.el.getBoundingClientRect().top+scrollY-40),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
+ function jump(id){
+  if(axoStream.type!=='project')return;
+  const target=projectCards().find(card=>card.id===id);
+  if(!target){toast('That section is not available yet.');return;}
+  projectSection=id;
+  const tools=document.querySelector('.axo-project-tools'),bar=document.querySelector('.axo-market-context.project');
+  if(tools)tools.open=false;
+  layout();projectControls();
+  const heading=target.el.querySelector('h2,h3')||target.el;
+  heading.tabIndex=-1;heading.focus({preventScroll:true});
+  const offset=(bar?.offsetHeight||0)+40,rect=target.el.getBoundingClientRect();
+  const dock=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--axo-composer-clearance'))||100;
+  if(rect.top>=offset&&rect.bottom<=innerHeight-dock)return;
+  window.scrollTo({top:Math.max(0,rect.top+scrollY-offset),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+ }
+ const anchorCard=axoProjectCard;
+ axoProjectCard=function(project,...args){
+  const markup=anchorCard(project,...args);
+  if('project-'+project.id!==axoProjectAnchorId())return markup;
+  const template=document.createElement('template');template.innerHTML=markup;
+  const card=template.content.firstElementChild,content=card?.querySelector('.pc-content');
+  if(!content)return markup;
+  const priceRow=content.querySelector('.pc-price-row'),metrics=content.querySelector('.pc-metrics');
+  if(!priceRow||!metrics)return markup;
+  content.prepend(priceRow,metrics);
+  const [cap,holders,fdv,liquidity,hourly,daily,trades]=metrics.children;
+  if(daily)metrics.append(cap,liquidity,fdv,holders,hourly,daily);
+  const details=document.createElement('details');details.className='axo-project-depth';details.dataset.pcKey='workspace-details';
+  const summary=document.createElement('summary');summary.textContent='More project data';details.append(summary);
+  const links=card.querySelector('.pc-project-links');
+  if(links)details.append(links);
+  if(trades)details.append(trades);
+  const extra=content.querySelectorAll(':scope > .axo-decision-brief, :scope > .pc-periods, :scope > .pc-mini, :scope > .axo-momentum, :scope > .pc-flow, :scope > .pc-signal, :scope > .axo-intel-evidence');
+  details.append(...extra);
+  const security=card.querySelector(':scope > .pc-security'),actions=card.querySelector(':scope > .pc-actions');
+  if(security)content.after(security);
+  if(actions)actions.after(details);else content.after(details);
+  return template.innerHTML;
+ };
  function projectControls(){
-  if(axoStream.type!=='project')return;document.querySelector('.focus-heading h2').textContent='Project sections';document.querySelector('.focus-heading .mini').textContent='Jump directly to the evidence';
-  const cards=projectCards(),p=axoStreamProject,scope=axoStream.project,logo=p?watchOverviewArtwork(p).logo:null,risk=p?axoRiskState(p):null,heading=p?.name||p?.symbol||'Loading exact project';
-  const quick=[['Decision','stream-data-project-brief'],['Risk','stream-data-risk-project'],['Chart',cards.some(c=>c.id==='stream-data-project-dexchart')?'stream-data-project-dexchart':'stream-data-project-chart'],['Activity','stream-data-project-activity']];
-  const html='<div class="axo-project-navigation"><div class="axo-project-orientation">'+(logo?'<img src="'+esc(logo)+'" alt="" width="28" height="28" referrerpolicy="no-referrer">':'')+'<strong>'+esc(heading)+'</strong><span>'+esc(axoChainNames[scope?.chain]||scope?.chain||'')+'</span><span class="axo-project-check '+(risk?.excluded?'risk':'')+'">'+esc(risk?.label||'Checks unknown')+'</span></div><div class="axo-project-jumps" aria-label="Project sections">'+quick.map(([label,id])=>'<button class="btn" data-project-jump="'+esc(id)+'" '+(cards.some(c=>c.id===id)?'':'disabled')+'>'+label+'</button>').join('')+'<label><select data-project-section aria-label="All project sections"><option value="">All '+cards.length+' sections…</option>'+cards.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.title)+'</option>').join('')+'</select></label></div></div>';
+  if(axoStream.type!=='project')return;document.querySelector('.focus-heading h2').textContent='Project sections';
+  const scope=axoStreamIdentity();
+  if(projectScope!==scope){projectScope=scope;projectSection=null;}
+  const cards=projectCards(),p=axoStreamProject,heading=p?.name||p?.symbol||'Loading exact project';
+  const anchor=axoProjectAnchorId(),active=projectSection||anchor;
+  const quick=[['Top',anchor],['Chart','stream-data-project-chart'],['Pools',axoVenueCardId],['Risk','stream-data-risk-project']];
+  const html='<nav class="axo-project-navigation" aria-label="Project sections"><div class="axo-project-orientation"><strong>'+esc(heading)+'</strong></div>'+
+   '<div class="axo-project-jumps">'+quick.map(([label,id])=>'<button class="btn" type="button" data-project-jump="'+esc(id)+'" '+(id&&id===active?'aria-current="location" ':'')+(cards.some(c=>c.id===id)?'':'disabled')+'>'+label+'</button>').join('')+
+   '<label><select data-project-section aria-label="All project sections"><option value="">Sections…</option>'+cards.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.title)+'</option>').join('')+'</select></label></div></nav>';
   if(!focusDeck.querySelector('.axo-project-navigation'))focusDeck.innerHTML=html;else{const t=document.createElement('template');t.innerHTML=html;const old=focusDeck.firstElementChild;if(old.outerHTML!==t.content.firstElementChild.outerHTML)window.axoPatchLiveCard(old,t.content.firstElementChild);}
  }
- const focusBase=axoFocusRender;axoFocusRender=function(...args){if(axoStream.type==='watchlist'){watchControls();return;}if(axoStream.type==='project'){projectControls();return;}return focusBase(...args);};
- const order=axoOrderCards;axoOrderCards=function(cards){const rows=order(cards);if(axoStream.type!=='project'||Date.now()<manualUntil||axoStream.requested)return rows;const priority=[axoProjectAnchorId(),'stream-data-project-brief','stream-data-risk-project','stream-data-project-dexchart','stream-data-project-activity','stream-data-project-chart','stream-data-project-progress'];const rank=id=>id===priority[0]?-2:pins.includes(id)?-1:priority.indexOf(id)>0?priority.indexOf(id):100;return rows.map((r,i)=>({r,i})).sort((a,b)=>rank(a.r[0])-rank(b.r[0])||a.i-b.i).map(x=>x.r);};
+ const focusBase=axoFocusRender;axoFocusRender=function(...args){document.documentElement.classList.toggle('axo-project-workspace',axoStream.type==='project');if(axoStream.type==='watchlist'){watchControls();return;}if(axoStream.type==='project'){projectControls();return;}return focusBase(...args);};
+ const order=axoOrderCards;axoOrderCards=function(cards){const rows=order(cards);if(axoStream.type!=='project'||Date.now()<manualUntil||axoStream.requested)return rows;const priority=[axoProjectAnchorId(),'stream-data-project-chart',axoVenueCardId,'stream-data-project-brief','stream-data-risk-project','stream-data-project-activity','stream-data-project-progress','stream-data-project-dexchart'];const rank=id=>id===priority[0]?-2:pins.includes(id)?-1:priority.indexOf(id)>0?priority.indexOf(id):100;return rows.map((r,i)=>({r,i})).sort((a,b)=>rank(a.r[0])-rank(b.r[0])||a.i-b.i).map(x=>x.r);};
  const visible=axoStreamCardVisible;axoStreamCardVisible=function(id){if(!visible(id))return false;if(axoStream.type!=='watchlist'||!id.startsWith('project-'))return true;const p=axoProjectMap.get(id);return !!p&&watchRows().some(w=>watchIdentity(w)===watchIdentity(p));};
  function applyWatch(){clearTimeout(searchTimer);window.axoLayoutHold?.reset();render(true);}
  document.addEventListener('input',e=>{if(!e.target.matches('[data-watch-query]')||axoStream.type!=='watchlist')return;query=e.target.value.trim().slice(0,160);clearTimeout(searchTimer);searchTimer=setTimeout(applyWatch,160);});

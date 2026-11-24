@@ -2,8 +2,46 @@
 const projectPresentationCardBase=axoProjectCard;axoProjectCard=function(p,...args){const html=projectPresentationCardBase(p,...args),t=document.createElement('template');t.innerHTML=html;const art=watchOverviewArtwork(p),card=t.content.querySelector('.pc-card'),head=card?.querySelector('.pc-head,.pc-header,.card-header');if(head&&art.kind==='banner'&&art.artwork){head.classList.add('pc-banner-header');head.insertAdjacentHTML('afterbegin','<img class="pc-banner-art" src="'+esc(art.artwork)+'" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer"><span class="pc-banner-shade" aria-hidden="true"></span>')}return t.innerHTML};
 const watchPresentationMarkupBase=watchOverviewMarkup;watchOverviewMarkup=function(){const t=document.createElement('template');t.innerHTML=watchPresentationMarkupBase();for(const el of t.content.querySelectorAll('[data-watch-overview-row]')){const p=axoWatch.find(p=>watchIdentity(p)===el.dataset.watchOverviewRow);if(!p)continue;const m=watchOverviewState(p),change=p.changes?.h1??p.change1,metrics=el.querySelector('.watch-row-metrics');metrics?.insertAdjacentHTML('afterbegin','<span class="watch-hour-change">1h <b class="'+(Number.isFinite(change)?change>0?'up':change<0?'down':'flat':'unknown')+'">'+(Number.isFinite(change)?axoCardPct(change):'—')+'</b></span>');el.querySelector('.watch-row-change')?.setAttribute('title','24-hour price change · '+ecoDate(p.seenAt));const trend=el.querySelector('.watch-holder-delta');if(trend)trend.setAttribute('aria-label','Holder address change; '+trend.title)}return t.innerHTML};
 function axoDexChartUrl(p){const links=axoCardExternalLinks(p);if(!links.dexExact)return null;const url=new URL(links.dex),theme=document.documentElement.dataset.theme==='dark'?'dark':'light';url.search=new URLSearchParams({embed:'1',trades:'0',info:'0',loadChartSettings:'0',chartLeftToolbar:'0',chartType:'price',chartStyle:'1',interval:'15',theme,chartTheme:theme});return url.href}
+const axoVenueCardId='stream-data-project-venues';
+function axoProjectVenueRows(){
+ const p=axoStreamProject;
+ if(axoStream.type!=='project'||!p)return [];
+ return AxoMarketIntel.projectVenues(axoStreamResearch?.pools,p).filter(({pool})=>{
+  try{AxoStreamSchema.exact({chain:pool.chain,address:pool.address,pool:pool.pair},true);return true;}catch{return false;}
+ });
+}
+function axoProjectVenuesCard(){
+ const rows=axoProjectVenueRows(),shown=rows.slice(0,6);
+ const quality={current:'Current',stale:'Dated',conflict:'Conflicting sources',inconsistent:'Inconsistent data',incomplete:'Price unavailable'};
+ const short=p=>p.slice(0,7)+'…'+p.slice(-4);
+ const marketValue=(status,value,format)=>status==='current'&&Number.isFinite(value)&&value>=0?esc(format(value)):'—';
+ const row=({pool:p,status,current,difference})=>{
+  const spread=current?'Selected':Number.isFinite(difference)?esc(pct(difference)):'—';
+  const clock=new Date(p.seenAt);
+  return '<tr'+(current?' data-venue-selected':'')+'><th scope="row"><b>'+esc(p.dex||'Venue unknown')+'</b><small title="'+esc(p.pair)+'">'+esc(short(p.pair))+'</small></th>'+
+   '<td data-label="Quote">'+esc(p.quote||'—')+'</td><td data-label="Liquidity">'+marketValue(status,p.liquidity,fmt)+'</td>'+
+   '<td data-label="1h volume">'+marketValue(status,p.volume1,fmt)+'</td><td data-label="Price">'+marketValue(status,p.price,price)+'</td>'+
+   '<td data-label="vs. selected">'+spread+'</td><td class="axo-venue-source"><b>'+esc(quality[status]||'Unavailable')+'</b><small title="'+esc(clock.toISOString())+'">'+esc(p.provider||'Source unknown')+' · '+esc(age(p.seenAt))+'</small></td>'+
+   '<td class="axo-venue-action">'+(current?'':'<button type="button" class="btn" data-project-venue="'+esc(p.pair)+'" aria-label="'+esc('Open '+(p.dex||'venue')+' pool '+short(p.pair))+'">View pool</button>')+'</td></tr>';
+ };
+ const table=shown.length?'<table class="axo-project-venues"><caption class="axo-venue-sr">Exact pools for this token. Market amounts in USD.</caption>'+
+  '<thead><tr><th scope="col">Venue / pool</th><th scope="col">Quote</th><th scope="col">Liquidity</th><th scope="col">1h volume</th><th scope="col">USD price</th><th scope="col">vs. selected</th><th scope="col">Observation</th><th scope="col">Pool</th></tr></thead><tbody>'+
+  shown.map(row).join('')+'</tbody></table>':'<p class="mini">Pool observations are unavailable for this contract.</p>';
+ const summary=rows.length>shown.length?'Showing '+shown.length+' of '+rows.length+' observed pools':rows.length===1?'One observed pool':rows.length+' observed pools';
+ const footer='<p class="axo-venues-note">USD price differences use current pool observations taken within one minute. Liquidity is reported reserve value.</p>';
+ titles[axoVenueCardId]='Pool venues';
+ cardVisuals[axoVenueCardId]=['layers','Same contract on '+(axoChainNames[axoStreamProject.chain]||axoStreamProject.chain),'#6e9efb','#edf4ff'];
+ return [axoVenueCardId,shell(axoVenueCardId,'Pool venues',summary,table,footer,'axo-stream-data-card axo-project-venue-card')];
+}
+document.addEventListener('click',event=>{
+ const button=event.target.closest('[data-project-venue]');
+ if(!button)return;
+ const row=axoProjectVenueRows().find(({pool,current})=>!current&&pool.pair===button.dataset.projectVenue);
+ if(row)axoOpenProjectStream(row.pool);
+});
 const projectDexDataBase=axoStreamDataCards;axoStreamDataCards=function(){const cards=projectDexDataBase();if(axoStream.type!=='project'||!axoStreamProject)return cards;const p=axoStreamProject,id='stream-data-project-dexchart';titles[id]='DEX Screener chart';cardVisuals[id]=['bars','Exact project chart','#71829b','#edf1f6'];const url=axoDexChartUrl(p);const body=url?'<iframe class="axo-dex-chart" src="'+esc(url)+'" title="DEX Screener candle chart for '+esc(p.symbol||p.name)+' on '+esc(p.chain)+'" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>':'<p class="mini">An exact DEX Screener pool chart is not available for this contract yet.</p>';cards.push([id,shell(id,'DEX Screener chart',(p.symbol||p.name||'Project')+' · '+p.chain,body)]);return cards};
-const projectPresentationVisibleBase=axoStreamCardVisible;axoStreamCardVisible=function(id){return id==='stream-data-project-dexchart'?axoStream.type==='project':projectPresentationVisibleBase(id)};
+const projectVenueDataBase=axoStreamDataCards;axoStreamDataCards=function(){const cards=projectVenueDataBase();if(axoStream.type==='project'&&axoStreamProject&&!hidden.includes(axoVenueCardId))cards.push(axoProjectVenuesCard());return cards};
+const projectPresentationVisibleBase=axoStreamCardVisible;axoStreamCardVisible=function(id){return ['stream-data-project-dexchart',axoVenueCardId].includes(id)?axoStream.type==='project':projectPresentationVisibleBase(id)};
 const projectPresentationCss=document.createElement('style');projectPresentationCss.textContent='.pc-banner-header{position:relative;isolation:isolate;overflow:hidden;min-height:92px;background:#161c24;color:#fff}.pc-banner-header>*:not(.pc-banner-art):not(.pc-banner-shade){position:relative;z-index:1}.pc-banner-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;pointer-events:none}.pc-banner-shade{position:absolute;inset:0;background:linear-gradient(90deg,#111820e8,#11182085,#111820c9);z-index:-1;pointer-events:none}.pc-banner-header h2,.pc-banner-header b{color:#fff}.pc-banner-header small{color:#d7dde6}.axo-dex-chart{width:100%;height:520px;border:0;display:block;border-radius:8px;background:var(--ax-raised)}@media(max-width:600px){.axo-dex-chart{height:460px}}';document.head.append(projectPresentationCss);
 document.addEventListener('error',e=>{if(e.target.matches?.('.pc-banner-art')){const h=e.target.parentElement;h.classList.remove('pc-banner-header');h.querySelector('.pc-banner-shade')?.remove();e.target.remove()}},true);render(false);
 

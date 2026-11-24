@@ -3,32 +3,44 @@
  const nav=axoShortcutBar.closest('.top-instruments'),helpers=AxoDiscoveryFilters;
  nav.classList.add('axo-ux-nav');
  const status=document.createElement('div');status.className='axo-navigation-context';status.innerHTML='<button type="button" class="btn" data-stream-back aria-label="Back to previous stream" title="Back to previous stream">←</button><span data-current-stream></span><button type="button" class="btn" data-find-stream title="Find a stream · Ctrl/⌘ K">Find stream <kbd>⌘ / Ctrl K</kbd></button>';nav.prepend(status);
- const focusHeading=document.querySelector('.focus-heading'),heading=document.querySelector('.stream-heading');
+ const focusHeading=document.querySelector('.focus-heading'),heading=document.querySelector('.stream-heading'),focusDeck=$('axoFocus');
  const marketContext=document.createElement('details'),contextToggle=document.createElement('summary');
  marketContext.className='axo-market-context';contextToggle.textContent='Market context';
- focusHeading.before(marketContext);marketContext.append(contextToggle,focusHeading,$('axoFocus'));
+ focusHeading.before(marketContext);marketContext.append(contextToggle,focusHeading,focusDeck);
  const intelTools=document.querySelector('.axo-intel-shortcuts'),intelState=document.querySelector('.axo-intel-bar');
- let wasHome=null,homeContextOpen=false;
+ const projectTools=document.createElement('details');projectTools.className='axo-project-tools';
+ const projectToggle=document.createElement('summary');projectToggle.textContent='Tools';projectTools.append(projectToggle);
+ const projectRow=document.createElement('div');projectRow.className='axo-project-context-row';
+ let contextScope=null,homeContextOpen=false;
  function updateContext(){
   const home=axoStream.type==='home';
-  if(home===wasHome)return;
-  if(wasHome)homeContextOpen=marketContext.open;
+  const project=axoStream.type==='project',scope=home?'home':project?'project':'stream';
+  if(scope===contextScope)return;
+  if(contextScope==='home')homeContextOpen=marketContext.open;
   if(home){
    heading.append(marketContext);
    if(intelState)marketContext.append(intelState);
    if(intelTools)marketContext.append(intelTools);
+  }else if(project){
+   heading.before(marketContext);
+   marketContext.append(projectRow);projectRow.append(focusDeck,projectTools);
+   if(intelTools)projectTools.append(intelTools);
+   if(intelState)projectTools.append(intelState);
   }else{
    heading.before(marketContext);
    if(intelState)heading.after(intelState);
    if(intelTools)heading.append(intelTools);
   }
+  if(!project&&projectRow.isConnected){marketContext.insertBefore(focusDeck,projectRow);projectTools.open=false;projectRow.remove();}
   marketContext.open=home?homeContextOpen:true;
   contextToggle.hidden=!home;
   marketContext.classList.toggle('home',home);
+  marketContext.classList.toggle('project',project);
   heading.classList.toggle('axo-home-heading',home);
-  wasHome=home;
+  contextScope=scope;
  }
  marketContext.addEventListener('toggle',()=>requestAnimationFrame(layout));
+ projectTools.addEventListener('toggle',()=>requestAnimationFrame(layout));
  const finder=document.createElement('dialog');finder.className='axo-stream-finder';finder.setAttribute('aria-labelledby','axoFinderTitle');finder.innerHTML='<div class="row spread"><h2 id="axoFinderTitle">Find a stream</h2><button type="button" class="btn" data-finder-close aria-label="Close stream finder">×</button></div><label for="axoFinderQuery">Search streams and saved shortcuts</label><input id="axoFinderQuery" type="search" autocomplete="off" placeholder="Discovery, Watchlist, Base…"><p class="mini" data-finder-count role="status"></p><div data-finder-results></div>';document.body.append(finder);
  let opener=null,undo=null,draftError='',draftKeys=[],rangeTimer=null,desiredScroll=null,navEpoch=0;const positions=new WeakMap();
  function moveSettings(){const group=axoShortcutBar.querySelector('.axo-saved-group');if(group&&axoToolBar.parentElement!==group)group.append(axoToolBar);}

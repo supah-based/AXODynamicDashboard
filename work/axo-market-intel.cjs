@@ -44,5 +44,29 @@
   const headline={'risk-warning':'Review severe risk', 'check-data':'Check missing evidence',wait:'Inspect entry risks',investigate:'Activity worth researching',observe:'Watch for a clearer change'}[state];
   return {version:1,at:now,observedAt:p.seenAt||null,state,headline,quality:q,progression:comparable?progression:null,signals:signals.slice(0,3),cautions,gaps,metrics:{volume5:v5,volume1:v1,pace5toPrior55:pace,transactions5:transactions,buyShare5:transactions>0?b/transactions:null,turnover1:valid(p.liquidity)&&p.liquidity>0&&v1!==null?v1/p.liquidity:null},next:state==='risk-warning'?'Review the source flags; excluded from suggestions':state==='investigate'?'Open screening and check the chart, sellability and costs':state==='wait'?'Wait for a stronger entry or resolve the cautions':'Collect the missing evidence before acting',limits:'Attention and transaction counts do not prove unique buyers, net inflows, safety or future profit. Experimental triage only.'};
  }
- return {quality,brief,integrity};
+ function projectVenues(pools,selected,now=Date.now()){
+  const chain=selected?.chain,address=selected?.address,pair=selected?.pair;
+  if(!chain||!address||!pair||!Array.isArray(pools))return [];
+  const rows=new Map();
+  for(const pool of [selected,...pools]){
+   if(pool?.chain!==chain||!equal(pool.address,address,chain)||typeof pool.pair!=='string'||!pool.pair||
+      !recent(pool.seenAt,now,7*86400000))continue;
+   const key=chain==='solana'?pool.pair:pool.pair.toLowerCase(),old=rows.get(key);
+   const current=equal(pool.pair,pair,chain);
+   if(current&&pool!==selected)continue;
+   const status=quality(pool,now).status;
+   const usable=status==='current',previousUsable=old?.status==='current';
+   if(old&&(previousUsable&&!usable||previousUsable===usable&&old.pool.seenAt>=pool.seenAt))continue;
+   rows.set(key,{pool,status,current});
+  }
+  const reference=Array.from(rows.values()).find(row=>row.current);
+  return [...rows.values()].sort((a,b)=>Number(b.current)-Number(a.current)||
+   Number(b.status==='current')-Number(a.status==='current')||(b.pool.liquidity??-1)-(a.pool.liquidity??-1))
+   .map(row=>{
+    const comparable=row.status==='current'&&reference?.status==='current'&&Math.abs(row.pool.seenAt-reference.pool.seenAt)<=60000;
+    const difference=comparable?(row.pool.price/reference.pool.price-1)*100:null;
+    return {...row,difference:finite(difference)?difference:null};
+   });
+ }
+ return {quality,brief,integrity,projectVenues};
 });

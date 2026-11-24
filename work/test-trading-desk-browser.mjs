@@ -27,6 +27,9 @@ const data=Desk.CHAIN_IDS.map((chain,i)=>{
   transactions:{m5:{buys:12,sells:7},h1:{buys:50,sells:26},h24:i===2?{buys:800,sells:null}:{buys:700+i*20,sells:560+i*50}},participants:{m5:{unique:11,buyers:8,sellers:6},h1:{unique:27}}
  };
 });
+const arc=data[4],alternateArc={...arc,id:'arc:'+evm(90,64),pair:evm(90,64),dex:'Alternate Fixture',quote:'USDC',price:.026,liquidity:24500,volume1:3500,volume5:500,seenAt:at-20000};
+const datedArc={...arc,id:'arc:'+evm(91,64),pair:evm(91,64),dex:'Dated Fixture',quote:'USDT',price:99,seenAt:at-360000};
+const projectRows=[...data,alternateArc,datedArc];
 const screening=createTradingDesk({
  getPools:()=>data,getChain:chain=>({status:'available',sources:[{id:'top',provider:'GeckoTerminal',status:'available',fetchedAt:at-30000}],
   dex:{status:'live',source:'DefiLlama',receivedAt:at-30000,data:{volume:8250000,change:[5,12,-1.8,4.1,2][Desk.CHAIN_IDS.indexOf(chain)]}}}),
@@ -35,7 +38,7 @@ const screening=createTradingDesk({
 const browser=await chromium.launch({channel:process.env.AXO_BROWSER_CHANNEL||'chrome',headless:true});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:990},reducedMotion:'reduce'});
- const errors=[],preflights=[],onchain=[];page.on('pageerror',error=>errors.push(error.message));
+ const errors=[],preflights=[],onchain=[],historyReads=[];page.on('pageerror',error=>errors.push(error.message));
  await page.route('**/*',async route=>{
   const url=new URL(route.request().url()),path=url.pathname;
   if(url.hostname!=='axo-desk.test')return route.abort();
@@ -52,10 +55,24 @@ try{
   if(path==='/api/stream-memory')return route.fulfill({json:{revision:0,shortcuts:[],tombstones:[],preferences:{},projects:[]}});
   if(path==='/api/project'){
    const {chain,address,pool}=Object.fromEntries(url.searchParams);
-   const p=data.find(p=>p.chain===chain&&p.address===address&&p.pair===pool);
+   const p=projectRows.find(p=>p.chain===chain&&p.address===address&&p.pair===pool);
    if(!p)return route.fulfill({status:404,json:{error:'No exact fixture'}});
-   return route.fulfill({json:{project:{chain,address,pool},market:{status:'available',primary:p},pools:[p],identity:{name:p.name,symbol:p.symbol,links:[]},
+   const pools=chain==='arc'?[p,...projectRows.filter(other=>other!==p&&other.chain==='arc'),{...p,chain:'bsc',dex:'Wrong chain'}]:[p];
+   return route.fulfill({json:{project:{chain,address,pool},market:{status:'available',primary:p},pools,identity:{name:p.name,symbol:p.symbol,links:[]},
     onchain:{simulation:{status:'unavailable'}},enrichment:{gmgn:{status:'not_configured'}},receivedAt:at}});
+  }
+  if(path==='/api/ohlcv'){
+   const query=Object.fromEntries(url.searchParams),seconds={'15m':900,'1h':3600,'1d':86400,'1w':604800}[query.timeframe];
+   const p=projectRows.find(p=>p.chain===query.chain&&p.address===query.address&&p.pair===query.pool);
+   if(!p||!seconds)return route.fulfill({status:404,json:{status:'unavailable'}});
+   historyReads.push(query);
+   const bucket=Math.floor(at/1000/seconds)*seconds;
+   const candles=Array.from({length:28},(_,i)=>{
+    if(query.timeframe==='15m')return [bucket-(27-i)*seconds,p.price,p.price,p.price,p.price,1000];
+    const open=p.price*(.78+i*.007+Math.sin(i)*.035),close=open*(i%3?.99:1.02);
+    return [bucket-(27-i)*seconds,open,Math.max(open,close)*1.025,Math.min(open,close)*.965,close,1000+i*70];
+   });
+   return route.fulfill({json:{...query,pool:query.timeframe==='1d'?evm(999,64):query.pool,status:'available',currency:'USD',bucketSeconds:seconds,candles,receivedAt:at,notes:'Fixture candles only.'}});
   }
   if(path==='/api/trading-desk/contract'){
    const identity=Object.fromEntries(url.searchParams);
@@ -268,6 +285,91 @@ try{
  await page.waitForFunction(()=>axoStreamProject?.symbol==='FIX5');
  const params=new URL(page.url()).searchParams;
  assert.equal(params.get('pool'),exactArc.pool);
+ const chart=page.locator('[data-card="stream-data-project-chart"]'),venues=page.locator('[data-card="stream-data-project-venues"]');
+ await chart.locator('[data-candle][aria-current="true"]').waitFor();
+ assert.equal(await chart.locator('[data-candle][tabindex="0"]').count(),1);
+ assert.equal(await chart.locator('[data-candle][aria-current="true"]').getAttribute('data-candle'),'27');
+ await chart.locator('[data-candle][tabindex="0"]').focus();
+ await page.keyboard.press('ArrowLeft');
+ assert.equal(await chart.locator('[data-candle][aria-current="true"]').getAttribute('data-candle'),'26');
+ assert.equal(await chart.locator('.axo-candle-detail time').getAttribute('datetime'),new Date((Math.floor(at/3600000)-1)*3600000).toISOString());
+ await chart.getByRole('button',{name:'Previous candle'}).click();
+ assert.equal(await chart.locator('[data-candle][aria-current="true"]').getAttribute('data-candle'),'25');
+ await chart.locator('[data-stream-frame="1d"]').click();
+ await chart.getByText('Chart evidence could not be matched to this pool and timeframe.').waitFor();
+ assert.equal(await chart.locator('[data-candle]').count(),0);
+ await chart.locator('[data-stream-frame="15m"]').click();
+ await chart.locator('[data-candle][aria-current="true"]').waitFor();
+ const flatChartFits=await chart.locator('.axo-candles').evaluate(svg=>[...svg.querySelectorAll(':scope > line')].every(line=>Number(line.getAttribute('y1'))>=0&&Number(line.getAttribute('y1'))<svg.viewBox.baseVal.height));
+ assert(flatChartFits,'A flat price series keeps every axis level within the plot');
+ await chart.locator('[data-stream-frame="1h"]').click();
+ await chart.locator('[data-candle][aria-current="true"]').waitFor();
+ assert.equal(await chart.locator('[data-candle][aria-current="true"]').getAttribute('data-candle'),'25');
+ await venues.getByText('Alternate Fixture',{exact:true}).waitFor();
+ assert.equal(await venues.getByText('Wrong chain').count(),0);
+ assert.equal(await venues.locator('tbody tr').count(),3);
+ assert.match(await venues.getByRole('row').filter({hasText:'Alternate Fixture'}).innerText(),/\+4\.0%/);
+ const datedRow=venues.getByRole('row').filter({hasText:'Dated Fixture'});
+ assert.match(await datedRow.innerText(),/Dated/);
+ assert(!((await datedRow.innerText()).includes('$99')));
+ await venues.getByRole('button',{name:/Open Alternate Fixture pool/}).click();
+ await page.waitForFunction(pool=>axoStreamProject?.pair===pool,alternateArc.pair);
+ await chart.locator('[data-candle][aria-current="true"]').waitFor();
+ assert.equal(new URL(page.url()).searchParams.get('address'),exactArc.address);
+ assert.equal(new URL(page.url()).searchParams.get('pool'),alternateArc.pair);
+ assert(historyReads.some(query=>query.pool===alternateArc.pair&&query.timeframe==='1h'));
+ await page.goBack();
+ await page.waitForFunction(pool=>axoStreamProject?.pair===pool,exactArc.pool);
+ await chart.locator('[data-candle][aria-current="true"]').waitFor();
+ await page.locator('.axo-project-tools summary').click();
+ await page.locator('[data-pulse-unchecked]').waitFor({state:'visible'});
+ await page.locator('.axo-project-tools summary').click();
+ const depth=page.locator('.axo-project-anchor .axo-project-depth');
+ await depth.locator(':scope > summary').click();
+ await page.evaluate(()=>render(true));
+ assert(await depth.evaluate(node=>node.open),'Refreshing keeps the project details open');
+ await depth.locator(':scope > summary').click();
+ const projectSnapshot=page.locator('.axo-project-anchor');
+ await projectSnapshot.locator('[data-axo-score-open]').click();
+ await projectSnapshot.locator('.axo-score-detail[open]').waitFor();
+ await projectSnapshot.locator('[data-axo-score-open]').click();
+ const rail=page.locator('.utility-rail');
+ await page.waitForFunction(()=>document.querySelector('.utility-rail').getBoundingClientRect().width<=60);
+ await projectSnapshot.locator('[data-save-metric]').click();
+ await page.waitForFunction(()=>document.querySelector('.utility-rail').getBoundingClientRect().width>100&&document.querySelector('.saved-metric'));
+ await rail.locator('.saved-remove').first().click();
+ await page.waitForFunction(()=>document.querySelector('.utility-rail').getBoundingClientRect().width<=60);
+ for(const width of [1440,390,320]){
+  await page.setViewportSize({width,height:844});
+  await page.evaluate(async()=>{document.activeElement?.blur();scrollTo(0,0);layout();await new Promise(requestAnimationFrame);});
+  const layout=await page.evaluate(()=>{
+   const anchor=document.querySelector('.axo-project-anchor'),board=document.querySelector('#board');
+   return {first:anchor===board.firstElementChild,anchorY:anchor.getBoundingClientRect().top,
+    priceEnd:anchor.querySelector('.pc-price-row').getBoundingClientRect().bottom,
+    chartY:document.querySelector('[data-card="stream-data-project-chart"]').getBoundingClientRect().top,
+    dockY:innerHeight-parseFloat(getComputedStyle(document.body,'::after').height),overflow:document.documentElement.scrollWidth>innerWidth+1};
+  });
+  assert(layout.first&&!layout.overflow,JSON.stringify({width,layout}));
+  assert(layout.priceEnd<layout.dockY,JSON.stringify({width,layout}));
+  if(width===1440){
+   assert(Math.abs(layout.chartY-layout.anchorY)<=2,JSON.stringify({width,layout}));
+   assert((await chart.boundingBox()).width>(await projectSnapshot.boundingBox()).width*1.4);
+  }
+  if(width===1440)await page.setViewportSize({width,height:1000});
+  if(width!==320)await page.screenshot({path:'outputs/axo-project-research-'+(width===1440?'desktop':'mobile')+'.png',style:'#toast{visibility:hidden}.card[data-axo-reading]{outline:none!important;box-shadow:none!important}'});
+  if(width!==1440){
+   const jump=page.locator('[data-project-jump="stream-data-project-chart"]');
+   await jump.click();
+   assert.equal(await jump.getAttribute('aria-current'),'location');
+   const target=await page.evaluate(()=>{
+    const bar=document.querySelector('.axo-market-context.project'),plot=document.querySelector('.axo-candles');
+    return {navBottom:bar.getBoundingClientRect().bottom,plot:plot.getBoundingClientRect().toJSON(),dock:innerHeight-parseFloat(getComputedStyle(document.body,'::after').height)};
+   });
+   assert(target.plot.top>=target.navBottom&&target.plot.bottom<target.dock,JSON.stringify({width,target}));
+   if(width===390)await page.screenshot({path:'outputs/axo-project-research-mobile-chart.png',style:'#toast{visibility:hidden}.card[data-axo-reading]{outline:none!important;box-shadow:none!important}'});
+  }
+ }
+ await page.setViewportSize({width:1440,height:990});
  await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'https://axo-desk.test'});
  await page.getByRole('button',{name:'Copy stream link'}).click();
  await page.waitForFunction(async()=>new URLSearchParams((await navigator.clipboard.readText()).split('?')[1]||'').get('stream')==='project');
@@ -313,5 +415,5 @@ try{
  }
  assert.deepEqual(errors,[]);
  console.log('First result at an 844px viewport height',firstResultPositions);
- console.log('PASS Chrome Trading Desk and user journeys: market signals, exact pool search and copy, sorting, visible first results, mobile filters, project evidence, browser history and all five chain streams.');
+ console.log('PASS Chrome Trading Desk and project research: exact venue switching, dated evidence, native chart intervals, keyboard and touch controls, sticky jumps, responsive layout, and all five chain streams.');
 }finally{await browser.close();}
