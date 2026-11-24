@@ -7,6 +7,26 @@ function axoVizDirection(p){const v=p.changes?.h24??p.change24;return Number.isF
 function axoVizLogo(p){const url=typeof watchOverviewArtwork==='function'?watchOverviewArtwork(p).logo:axoSafeImage(p.imageUrl),initials=String(p.symbol||p.name||'?').slice(0,2).toUpperCase();return '<span class="axo-viz-avatar" aria-hidden="true"><span>'+esc(initials)+'</span>'+(url?'<img src="'+esc(url)+'" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">':'')+'</span>';}
 function axoVizDetail(p,metric){return (p.name||p.symbol)+' · '+(axoChainNames[p.chain]||p.chain)+' · '+metric+' · 24h price '+axoCardPct(p.changes?.h24??p.change24)+' · observed '+(p.seenAt?ecoDate(p.seenAt):'date unavailable')+' · pool '+axoCardShort(p.pair||p.pool);}
 function axoVizLegend(){return '<div class="axo-viz-legend" aria-label="Color legend: 24-hour price direction"><span class="up">Gaining</span><span class="down">Declining</span><span class="unknown">Flat / unknown</span></div>';}
+function axoPctHeat(value){
+ if(!Number.isFinite(value))return '<span class="axo-pct-heat" data-direction="missing" title="Price change unavailable" aria-label="Unavailable">—</span>';
+ const sign=value>0?'up':value<0?'down':'flat';
+ const intensity=Math.abs(value)>=15?3:Math.abs(value)>=5?2:1;
+ const display=Math.abs(value)>=1000?(value>0?'+':'')+(value/1000).toFixed(1)+'k%':axoCardPct(value);
+ return '<span class="axo-pct-heat" data-direction="'+sign+'" data-intensity="'+intensity+'" title="'+esc(axoCardPct(value))+'">'+esc(display)+'</span>';
+}
+function axoMomentumMatrix(projects){
+ const rows=AxoVisualModel.momentumMatrix(projects),shown=rows.slice(0,24);
+ if(!rows.length)return '<p class="axo-viz-empty">Current price changes are unavailable for these pools.</p>';
+ const table=items=>'<table class="axo-momentum-matrix" aria-label="Project price change by window"><thead><tr><th scope="col">Project / liquidity</th>'+
+  Object.values(AxoVisualModel.priceWindows).map(label=>'<th scope="col">'+label+'</th>').join('')+'</tr></thead><tbody>'+
+  items.map(({project:p,at,returns,liquidity})=>'<tr><th scope="row"><button type="button"'+axoVizOpen(p)+' title="'+esc(axoVizDetail(p,axoCardMoney(liquidity)+' liquidity'))+'">'+
+   '<b>'+esc(p.symbol||p.name)+'</b><small>'+esc(axoChainNames[p.chain]||p.chain)+' · '+esc(axoCardMoney(liquidity))+'</small></button></th>'+
+   returns.map(value=>'<td>'+axoPctHeat(value)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+ const oldest=Math.min(...shown.map(r=>r.at)),latest=Math.max(...shown.map(r=>r.at)),extra=shown.length-8;
+ return '<section class="axo-matrix-panel"><div class="axo-matrix-meta"><b>Price change by window</b><small>'+shown.length+' / '+rows.length+' pools</small></div>'+
+  table(shown.slice(0,8))+(extra>0?'<details><summary>Show '+extra+' more '+(extra===1?'pool':'pools')+'</summary>'+table(shown.slice(8))+'</details>':'')+
+  '<div class="axo-matrix-meta"><small>Stronger color = larger move · — unavailable</small><time datetime="'+new Date(latest).toISOString()+'" title="'+esc(ecoDate(oldest)+' to '+ecoDate(latest))+'">Latest '+esc(age(latest))+'</time></div></section>';
+}
 function axoVizList(rows,metric=p=>axoCardMoney(p.volume24)+' volume · '+axoCardMoney(p.liquidity)+' liquidity'){return rows.length?'<details class="axo-viz-list"><summary>Explore all '+rows.length+' projects <span>Ranked selection list</span></summary><div>'+rows.map((p,i)=>'<button class="axo-viz-row"'+axoVizOpen(p)+' aria-label="Open '+esc(axoVizDetail(p,metric(p)))+'"><span class="axo-viz-rank">'+(i+1)+'</span>'+axoVizLogo(p)+'<span class="axo-viz-row-name"><b>'+esc(p.symbol||p.name)+'</b><small>'+esc(axoChainNames[p.chain]||p.chain)+'</small></span><span class="axo-viz-row-value">'+esc(metric(p))+'</span></button>').join('')+'</div></details>':'';}
 function axoMomentumBoard(rows){
  const field=axoVizMode==='volume'?'volume24':axoVizMode==='h1'?'change1':'change24',value=p=>axoVizMode==='volume'?p.volume24:p.changes?.[axoVizMode]??p[field],label=axoVizMode==='volume'?'24h traded volume · USD':axoVizMode==='h1'?'Positive 1h price change · %':'Positive 24h price change · %',format=v=>axoVizMode==='volume'?axoCardMoney(v):axoCardPct(v),eligible=rows.filter(p=>Number.isFinite(value(p))&&value(p)>0).sort((a,b)=>value(b)-value(a)||axoContractKey(a).localeCompare(axoContractKey(b))),shown=eligible.slice(0,12),cells=axoTreemap(shown.map((p,i)=>({p,rank:i+1,weight:value(p)})),0,0,640,350);

@@ -24,4 +24,11 @@ output={...basic,operation:'open_stream',targetStream:'forged'};assert.equal((aw
 output={...basic,streamType:'news',chains:[],components:['narrative_map']};assert.equal((await plan('Make a market news stream')).operation,'create_stream');assert.equal(context.streamCatalog[2].stream.discovery.scoreMin,65);
 output={...basic,discoveryFilters:{mcMin:500000,mcMax:3000000,scoreMin:70,scoreMax:90},enrichment:{question:'Would you like a momentum board too?',components:['momentum_board']}};const created=await plan('Create my Base gems stream under 3 million');assert.equal(created.discoveryFilters.mcMax,3000000);assert.equal(created.components.length,1);assert.equal(created.enrichment.components[0],'momentum_board');
 output={...basic,discoveryFilters:{mcMin:3000000,mcMax:500000}};await assert.rejects(plan('Make a contradictory range'),/minimum exceeds maximum/);
+output={...basic,operation:'add_card',targetStream:'current',components:['momentum_matrix','metric_table'],metrics:['liquidity','change24']};
+const matrix=await plan('Add a momentum matrix with a liquidity comparison');
+assert.deepEqual(matrix.template.components,['momentum_matrix','metric_table']);
+assert.equal(matrix.liquidityMin,100000);
+assert.ok(context.cardLibrary.components.includes('momentum_matrix'));
+const savedMatrix=Stream.normalize({type:'discovery',requestedView:{...matrix.template,title:matrix.title}});
+assert.deepEqual(Stream.validate(savedMatrix).requestedView.components,matrix.components);
 console.log('PASS Realtime 2/mini configuration, Verse, multipart SDP, credential ownership, hangup/revocation/refunds, safe errors; exact saved/builtin navigation, forged-ID rejection, native news creation, explicit ranges and opt-in enrichment. No provider calls.');

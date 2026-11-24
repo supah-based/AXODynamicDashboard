@@ -49,7 +49,38 @@ const chVisibleBase=axoStreamCardVisible;axoStreamCardVisible=function(id){if(!a
 const chCandidateBase=candidates;candidates=function(){return axoChainScope()?chSelected():chCandidateBase()};
 const chTitleBase=axoStreamTitle;axoStreamTitle=function(s=axoStream){return s.type==='chain'&&axoChainNames[s.chain]?axoChainNames[s.chain]+' · '+(axoChainViews[s.id||'overview']||(s.id?.startsWith('news:')?'News · '+s.id.slice(5):'Overview')):chTitleBase(s)};
 const chGoBase=axoGoStream;axoGoStream=function(v,push=true){if(!v?.restoreStream&&axoChainScope()&&v?.chain===axoStream.chain&&['news','news-topic','narrative','launchpads'].includes(v.type)){const id=v.type==='news-topic'?'news:'+v.id:v.type==='news'?'news':v.type==='launchpads'?'launchpads':({new:'new',momentum:'leaders',liquid:'established'})[v.id];if(id)v={...v,type:'chain',id}}axoChains.page=0;chGoBase(v,push);if(axoChainScope())chRefresh(false)};
-async function chRefresh(explicit=false){const chain=axoStream.chain,initial=!axoChains.data.has(chain);if(!Object.hasOwn(axoChainNames,chain)||axoChains.jobs.has(chain))return;const job=(async()=>{try{const r=await fetch('/api/chain?chain='+chain+(initial?'&initial=1':''),{signal:AbortSignal.timeout(90000)});if(!r.ok)throw new Error('Chain source request unavailable');const d=await r.json();if(d.chain!==chain||!Array.isArray(d.pools))throw new Error('Unexpected chain response');axoChains.data.set(chain,d);axoChains.errors.delete(chain);if(d.refreshing)setTimeout(()=>{if(axoChainScope()&&axoStream.chain===chain&&!document.hidden)void chRefresh(false)},3000)}catch(e){axoChains.errors.set(chain,e.message);const old=axoChains.data.get(chain);if(old)old.status='stale'}finally{axoChains.jobs.delete(chain);if(axoChainScope()&&axoStream.chain===chain)render(explicit||initial&&!modalOpen&&!axoExpanded.size&&!document.activeElement?.closest('#board,#axoFocus,.utility-rail'));axoRenderSavedMetrics()}})();axoChains.jobs.set(chain,job);return job}
+async function chRefresh(explicit=false){
+ const chain=axoStream.chain,initial=!axoChains.data.has(chain);
+ if(!Object.hasOwn(axoChainNames,chain)||axoChains.jobs.has(chain))return;
+ const job=(async()=>{
+  let data=null,error=null;
+  try{
+   const response=await fetch('/api/chain?chain='+chain+(initial?'&initial=1':''),{signal:AbortSignal.timeout(90000)});
+   if(!response.ok)throw Error('Chain source request unavailable');
+   data=await response.json();
+   if(data?.chain!==chain||!Array.isArray(data.pools)){data=null;throw Error('Unexpected chain response');}
+  }catch(e){error=e.message;}
+  axoChains.jobs.delete(chain);
+  const present=()=>{
+   if(data){
+    axoChains.data.set(chain,data);
+    axoChains.errors.delete(chain);
+    if(data.refreshing)setTimeout(()=>{if(axoChainScope()&&axoStream.chain===chain&&!document.hidden)void chRefresh(false);},3000);
+   }else{
+    axoChains.errors.set(chain,error);
+    const previous=axoChains.data.get(chain);
+    if(previous)axoChains.data.set(chain,{...previous,status:'stale'});
+   }
+   if(axoChainScope()&&axoStream.chain===chain)render(explicit||initial&&!modalOpen&&!axoExpanded.size&&!document.activeElement?.closest('#board,#axoFocus,.utility-rail'));
+   axoRenderSavedMetrics();
+  };
+  if(typeof axoQueueMarketUpdate!=='function')present();
+  else if(explicit||initial)axoPresentMarketNow('chain:'+chain,present);
+  else axoQueueMarketUpdate('chain:'+chain,present);
+ })();
+ axoChains.jobs.set(chain,job);
+ return job;
+}
 const chTilesBase=axoContextTiles;axoContextTiles=function(){if(!axoChainScope())return chTilesBase();const d=chData(),s=d?chScreens():{},name=chName(),go=view=>({type:'stream',value:{...axoCaptureStream(),type:'chain',chain:axoStream.chain,id:view==='overview'?null:view}}),tile=(id,label,value,caption,view,group='overview')=>({id,label,value:String(value??'—'),caption,reason:name+' only. '+caption,action:go(view),group});return [
  tile('chainvolume',name+' activity',fmt(d?.dex?.data?.volume),'Rolling 24h DEX volume','activity'),tile('capital','Stablecoin supply',fmt(d?.capital?.data?.current),'Reported supply; not bridge flow','capital'),tile('launches','New pools',s.new?.length,'Sampled pools · ≤7 days','new'),tile('launchpads','Chain launchpads',d?.launchpads.length,'Source-listed chain association','launchpads'),tile('attention','Chain articles',d?.news.items.filter(a=>Date.now()-a.publishedAt<86400000).length,'Relevant headlines · published 24h','news'),tile('overview','Ecosystem overview',d?chProjectRows().length:'—','Projects in this chain sample','overview'),
  tile('momentum','24h gainers',s.leaders?.length,'Measured screen · limited universe','leaders','related'),tile('established','Established pools',s.established?.length,'≥30d · liquidity ≥$100k','established','related'),tile('research','Axo research','Open','Dated findings & source coverage','research','related'),tile('followed','Followed projects',s.followed?.length,'Exact local watchlist matches','followed','related')];};

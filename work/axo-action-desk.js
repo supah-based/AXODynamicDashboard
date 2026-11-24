@@ -6,6 +6,7 @@
  let filters=Desk.criteria(axoReadJson(storageKey,{})||{}),sample=null,loading=false,error='',startedAt=0,limit=pageSize,showAll=false;
  let searchTimer=0,checkExpiry=0,returnFocus=null,inspected=null,check=null,checkRequest=null,contractRequest=null,mode='inspect',mounted=null;
  let flowWindow='h1',signalsExpanded=false,rotationWindow='m5',rotationChain=null;
+ let manualPoll=false;
  const rotationStates={
   broadening:['Broadening','Volume pace is rising across the sample and most comparable pools are advancing.'],
   cooling:['Cooling','Volume pace has slowed and few comparable pools are advancing.'],
@@ -30,6 +31,7 @@
  const funds={active:'1h volume',momentum:'5m volume',new:'1h volume',rebound:'1h volume',following:'1h volume'};
  const root=()=>$('board').querySelector('[data-trading-desk]');
  const rotationRoot=()=>$('board').querySelector('[data-chain-rotation]');
+ const deskReading=()=>[root(),rotationRoot()].some(el=>el&&window.axoLayoutHold?.held(el.closest('.card')));
  const deskResize=new ResizeObserver(()=>requestAnimationFrame(layout));
  const dialog=document.createElement('dialog');
  dialog.className='axo-desk-dialog';
@@ -641,16 +643,28 @@
   }
  });
  async function poll(force=false){
-  if(loading||document.hidden||axoStream.type!=='home'||!force&&Date.now()-startedAt<40000)return;
-  loading=true;startedAt=Date.now();paint();
+  if(document.hidden||axoStream.type!=='home'||!force&&Date.now()-startedAt<40000)return;
+  if(loading){if(force){manualPoll=true;paint();}return;}
+  loading=true;startedAt=Date.now();
+  if(force||!sample)paint();
+  let next=null;
   try{
    const response=await fetch('/api/trading-desk',{signal:AbortSignal.timeout(15000)});
    if(!response.ok)throw Error();
    const value=await response.json();
    if(!Array.isArray(value.rows)||value.chains?.length!==5)throw Error();
-   sample=value;error='';
-  }catch{error='Trading Desk refresh unavailable. Source times are retained.';}
-  finally{loading=false;paint();}
+   next=value;
+  }catch{}
+  loading=false;
+  const immediate=force||manualPoll;
+  manualPoll=false;
+  const present=()=>{
+   if(next)sample=next;
+   error=next?'':'Trading Desk refresh unavailable. Source times are retained.';
+   if(axoStream.type==='home')paint();
+  };
+  if(immediate||!sample)axoPresentMarketNow(id,present);
+  else axoQueueMarketUpdate(id,present,()=>!deskReading());
  }
  const extra=axoExtraCards;
  axoExtraCards=function(){
@@ -708,9 +722,9 @@
  render=function(...args){
   const result=renderBase(...args);
   entry.hidden=!['chain','discovery','watchlist'].includes(axoStream.type);
-  if(axoStream.type==='home'){paint();void poll();}
+  if(axoStream.type==='home'){if(!deskReading())paint();void poll();}
   return result;
  };
- setInterval(()=>{paint();paintChainSignals();void poll();},40000);
+ setInterval(()=>{void poll();},40000);
  render(true);
 })();

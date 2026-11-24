@@ -2,6 +2,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.AxoVisualModel=api;})(globalThis,function(){
  'use strict';
  const finite=v=>typeof v==='number'&&Number.isFinite(v),amount=v=>finite(v)&&v>=0?v:null,count=v=>Number.isSafeInteger(v)&&v>=0?v:null;
+ const priceWindows=Object.freeze({m5:'5m',h1:'1h',h6:'6h',h24:'24h'});
  function identity(p){if(!p||typeof p.chain!=='string')return null;const sol=p.chain==='solana',address=p.address,pool=p.pool||p.pair,token=sol?/^[1-9A-HJ-NP-Za-km-z]{32,44}$/:/^0x[a-f0-9]{40}$/i,pair=sol?token:/^0x(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;if(!token.test(address||'')||!pair.test(pool||''))return null;return [p.chain,sol?address:address.toLowerCase(),sol?pool:pool.toLowerCase()].join(':');}
  function treemap(items,x=0,y=0,w=100,h=100){
   const rows=items.filter(r=>finite(r.weight)&&r.weight>0),total=rows.reduce((s,r)=>s+r.weight,0);if(!rows.length||!finite(total)||!(w>0&&h>0))return [];
@@ -21,5 +22,22 @@
   if(!identity(p)||identity(d)!==identity(p)||d?.status!=='available'||d.timeframe!=='1h'||String(d.currency).toLowerCase()!=='usd'||d.bucketSeconds!==3600)return [];
   const seen=new Set();return (d.candles||[]).filter(r=>Array.isArray(r)&&r.length>=6&&r.slice(0,6).every(finite)&&Number.isInteger(r[0])&&r[0]>0&&r[0]%3600===0&&(r[0]+3600)*1000<=now&&r[1]>0&&r[3]>0&&r[2]>=Math.max(r[1],r[4])&&r[3]<=Math.min(r[1],r[4])&&r[5]>=0&&!seen.has(r[0])&&seen.add(r[0])).sort((a,b)=>a[0]-b[0]).slice(-24).map(r=>({time:r[0]*1000,value:r[5]}));
  }
- return Object.freeze({identity,treemap,logAxis,activityMap,activity,hourlyVolumes});
+ function momentumMatrix(projects,now=Date.now()){
+  const rows=[],tokens=new Set();
+  for(const project of projects){
+   const evidence=activity(project,{now});
+   if(evidence.status!=='available')continue;
+   const returns=Object.keys(priceWindows).map(window=>{
+    const value=project.changes?.[window]??(window==='h1'?project.change1:window==='h24'?project.change24:null);
+    return finite(value)&&value>=-100?value:null;
+   });
+   if(returns.every(value=>value===null))continue;
+   const token=evidence.key.slice(0,evidence.key.lastIndexOf(':'));
+   if(tokens.has(token))continue;
+   tokens.add(token);
+   rows.push({project,at:evidence.at,returns,liquidity:amount(project.liquidity)});
+  }
+  return rows;
+ }
+ return Object.freeze({identity,treemap,logAxis,activityMap,activity,hourlyVolumes,priceWindows,momentumMatrix});
 });

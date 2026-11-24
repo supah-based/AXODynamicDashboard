@@ -1,6 +1,7 @@
 /* Deterministic arrivals and contextual exploration. No background model calls. */
 const axoArrivalStates=new Map(),axoArrivalExplicit=new Map(),axoArrivalPromoted=new Map();
-let axoArrivalScope='',axoArrivalPending=new Map(),axoArrivalLocked=false,axoArrivalSerial=0,axoApplyingArrivals=false,axoExplicitTileFocus=null,axoExplicitTileTopic=null;
+const axoPresentationInterval=30000;
+let axoArrivalScope='',axoArrivalPending=new Map(),axoArrivalLocked=false,axoArrivalSerial=0,axoApplyingArrivals=false,axoExplicitTileFocus=null,axoExplicitTileTopic=null,axoArrivalPresented=-Infinity;
 const axoContextScope=()=>JSON.stringify([axoStream.type,axoStream.chain,axoStream.id,axoStream.project||null,[...selected].sort(),axoLiquidity,axoLens]);
 const axoFreshFeed=id=>{const f=feed(id);return f.status==='live'&&f.receivedAt&&Date.now()-f.receivedAt<300000};
 function axoArrivalHeld(){const active=document.activeElement,top=$('board').getBoundingClientRect().top;return paused||hovered||modalOpen||document.hidden||axoExpanded.size>0||Date.now()-axoLastInput<2200||!!active?.closest('#board,#axoFocus,.utility-rail,.top-instruments,.composer')||top< -100}
@@ -34,7 +35,17 @@ function axoScanArrivals(){
  return switched;
 }
 function axoArrivalBanner(){if(!queued&&!axoArrivalPending.size)return;$("pending").classList.toggle("hidden",!paused);$("pending").querySelector("span").textContent=paused?"Live layout paused.":"Live updates reconcile automatically."}
-function axoAcceptArrivals(){for(const [id,event] of axoArrivalPending)axoArrivalPromoted.set(id,{...event,order:++axoArrivalSerial});while(axoArrivalPromoted.size>6)axoArrivalPromoted.delete(axoArrivalPromoted.keys().next().value);axoArrivalPending.clear();axoArrivalLocked=false}
+function axoArrivalReady(){return axoArrivalPending.size>0&&Date.now()-axoArrivalPresented>=axoPresentationInterval}
+function axoAcceptArrivals(){
+ for(const [id,event] of axoArrivalPending)if(Date.now()-event.at>=600000)axoArrivalPending.delete(id);
+ if(axoArrivalReady()){
+  const [id,event]=[...axoArrivalPending].sort(([,a],[,b])=>b.relevance-a.relevance||a.at-b.at)[0];
+  axoArrivalPromoted.set(id,{...event,order:++axoArrivalSerial});axoArrivalPending.delete(id);
+  axoArrivalPresented=Date.now();
+ }
+ while(axoArrivalPromoted.size>6)axoArrivalPromoted.delete(axoArrivalPromoted.keys().next().value);
+ axoArrivalLocked=false;
+}
 function axoOrderCards(cards){
  const existing=[...$('board').children].map(el=>el.dataset.card),order=custom.length&&Date.now()<manualUntil?custom:existing,initial=!existing.length;
  for(const [id] of cards)if(id.startsWith('request-')&&!existing.includes(id)&&!axoArrivalExplicit.has(id))axoArrivalExplicit.set(id,++axoArrivalSerial);
@@ -42,11 +53,11 @@ function axoOrderCards(cards){
  const rank=id=>axoArrivalExplicit.has(id)?[0,-axoArrivalExplicit.get(id)]:pins.includes(id)?[1,pins.indexOf(id)]:id===focusId?[2,0]:axoArrivalPromoted.has(id)&&Date.now()-axoArrivalPromoted.get(id).at<600000?[3,-axoArrivalPromoted.get(id).order]:[4,order.includes(id)?order.indexOf(id):9999];
  return cards.sort((a,b)=>{const x=rank(a[0]),y=rank(b[0]);return x[0]-y[0]||x[1]-y[1]||(initial?priority(b[0])-priority(a[0]):0)});
 }
-const axoArrivalExtraBase=axoExtraCards;axoExtraCards=function(){const rows=axoArrivalExtraBase();for(const id of new Set([...axoArrivalPending.keys(),...axoArrivalPromoted.keys()])){if(rows.some(r=>r[0]===id))continue;if(id.startsWith('project-')){const p=candidates().find(p=>'project-'+p.id===id);if(p){axoProjectMap.set(id,p);rows.push([id,axoProjectCard(p)])}}else{const a=axoNewsRows().find(a=>a.id===id);if(a)rows.push([id,axoHeadlineCard(a)])}}return rows};
+const axoArrivalExtraBase=axoExtraCards;axoExtraCards=function(){const rows=axoArrivalExtraBase();for(const [id,event] of axoArrivalPromoted){if(Date.now()-event.at>=600000||rows.some(r=>r[0]===id))continue;if(id.startsWith('project-')){const p=candidates().find(p=>'project-'+p.id===id);if(p){axoProjectMap.set(id,p);rows.push([id,axoProjectCard(p)])}}else{const a=axoNewsRows().find(a=>a.id===id);if(a)rows.push([id,axoHeadlineCard(a)])}}return rows};
 function axoDecorateArrivals(){for(const el of $('board').children){const reason=axoArrivalExplicit.has(el.dataset.card)?'Requested research · placed first':axoArrivalPromoted.get(el.dataset.card)?.reason;let badge=el.querySelector(':scope > .axo-arrival-note');if(!reason){badge?.remove();continue}if(!badge){badge=document.createElement('small');badge.className='axo-arrival-note';el.prepend(badge)}badge.textContent=reason;badge.title=reason+'. Priority for investigation, not an assessment of quality or returns.'}layout()}
 const axoArrivalRenderBase=render;render=function(force=false){
  const switched=axoScanArrivals();if((paused&&!axoApplyingArrivals&&!switched)||!force&&(axoArrivalHeld()||axoArrivalLocked)){if(axoArrivalPending.size)axoArrivalLocked=true;queued=snapshot;axoArrivalBanner();return}
- if(force||!axoArrivalHeld())axoAcceptArrivals();axoArrivalRenderBase(force);if(!queued){axoDecorateArrivals();if(switched)axoFocusRender()}else axoArrivalBanner();
+ if(!axoArrivalHeld())axoAcceptArrivals();axoArrivalRenderBase(force);if(!queued){axoDecorateArrivals();if(switched)axoFocusRender()}else axoArrivalBanner();
 };
 
 const axoCreateArrivalBase=window.axoCreateResearchCard;window.axoCreateResearchCard=function(action){const r=axoCreateArrivalBase(action);if(r){axoArrivalExplicit.set(r.id,++axoArrivalSerial);while(axoArrivalExplicit.size>32)axoArrivalExplicit.delete(axoArrivalExplicit.keys().next().value);const el=[...$('board').children].find(el=>el.dataset.card===r.id),moved=el&&$('board').firstElementChild!==el;if(moved)$('board').prepend(el);axoDecorateArrivals();if(moved)axoResearchReveal(r)}return r};

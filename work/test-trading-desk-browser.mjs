@@ -29,6 +29,11 @@ const data=Desk.CHAIN_IDS.map((chain,i)=>{
 });
 const arc=data[4],alternateArc={...arc,id:'arc:'+evm(90,64),pair:evm(90,64),dex:'Alternate Fixture',quote:'USDC',price:.026,liquidity:24500,volume1:3500,volume5:500,seenAt:at-20000};
 const datedArc={...arc,id:'arc:'+evm(91,64),pair:evm(91,64),dex:'Dated Fixture',quote:'USDT',price:99,seenAt:at-360000};
+const overviewPools=Array.from({length:11},(_,i)=>{
+ const p=data[1],change24=20-i;
+ return {...p,id:'base:'+evm(510+i),address:evm(310+i),pair:evm(510+i),name:'Project '+(i+1),symbol:'PAGE'+(i+1),
+  createdAt:at-(20-i)*3600000,liquidity:250000,volume24:90000+i,change24,changes:{m5:i===9?0:(i%4-1)*3,h1:2-i,h6:i===10?null:i*2-10,h24:change24}};
+});
 const rotationPools=['base','bsc','robinhood','arc'].flatMap((chain,index)=>Array.from({length:5},(_,i)=>{
  const source=data.find(p=>p.chain===chain),pair=evm(920+index*10+i,chain==='arc'?64:40),short=chain==='bsc'?-2:3;
  const volume5=chain==='arc'&&i===0?32000:chain==='bsc'?500:2400;
@@ -36,7 +41,12 @@ const rotationPools=['base','bsc','robinhood','arc'].flatMap((chain,index)=>Arra
   createdAt:chain==='robinhood'&&i>1?at-15*60000:at-30*3600000,volume5,volume1:chain==='arc'&&i===0?50000:chain==='bsc'?11500:15600,
   volume6:65000,volume24:chain==='bsc'?160000:195000,changes:{m5:short,h1:3,h24:5}};
 }));
-const projectRows=[...data,alternateArc,datedArc,...rotationPools];
+const projectRows=[...data,alternateArc,datedArc,...rotationPools,...overviewPools];
+const chainHistory=Array.from({length:34},(_,i)=>({time:Math.floor(at/86400000)*86400000-(34-i)*86400000,value:5000000+((i*19)%13+i)*120000}));
+const chainFeed={source:'Fixture',status:'live',receivedAt:at-20000,data:{history:chainHistory,volume:9200000,previous:7500000}};
+const historyFeed=(source,f)=>({source,status:'live',receivedAt:at-20000,data:{history:chainHistory.map((p,i)=>({...p,value:f(i)}))}});
+const tvlFeed=historyFeed('TVL fixture',i=>9000000+(i*2+(i%14))*300000);
+const supplyFeed=historyFeed('Stablecoin fixture',i=>12000000+(i>=18?1:0)*2000000+(i>=27?1:0)*1200000);
 const screening=createTradingDesk({
  getPools:()=>data,getChain:chain=>({status:'available',sources:[{id:'top',provider:'GeckoTerminal',status:'available',fetchedAt:at-30000}],
   dex:{status:'live',source:'DefiLlama',receivedAt:at-30000,data:{volume:8250000,change:[5,12,-1.8,4.1,2][Desk.CHAIN_IDS.indexOf(chain)]}}}),
@@ -44,6 +54,7 @@ const screening=createTradingDesk({
 });
 const rotationFixture=createTradingDesk({getPools:()=>rotationPools});
 let useRotationFixture=false;
+let useResearchFixture=false;
 const browser=await chromium.launch({channel:process.env.AXO_BROWSER_CHANNEL||'chrome',headless:true});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:990},reducedMotion:'reduce'});
@@ -99,8 +110,23 @@ try{
   }
   if(path==='/api/chain'){
    const chain=url.searchParams.get('chain'),first=data.find(p=>p.chain===chain);
-   const pools=chain==='base'?Array.from({length:11},(_,i)=>({...first,id:chain+':'+evm(510+i),address:evm(310+i),pair:evm(510+i),symbol:'PAGE'+(i+1),createdAt:at-(20-i)*3600000,liquidity:250000,volume24:90000+i,change24:20-i})):first?[first]:[];
-   return route.fulfill({json:{chain,pools,asOf:at,status:'available',sources:[],news:{items:[]}}});
+   const pools=chain==='base'?overviewPools:first?[first]:[];
+   return route.fulfill({json:{chain,pools,asOf:at,status:'available',dex:chainFeed,tvl:tvlFeed,capital:supplyFeed,sources:[],news:{items:[]}}});
+  }
+  if(path==='/api/intelligence/changes')return route.fulfill({json:{baselineCount:16,events:[
+   {...data[1],kind:'project',pool:data[1].pair,id:'base-change',metric:'liquidity',from:50000,to:80000,change:60,
+    fromAt:at-1800000,toAt:at-30000,source:'Fixture DEX',definition:'Both values refer to the same pool.'}] }});
+  if(useResearchFixture&&path==='/api/market-intelligence')return route.fulfill({json:{framework:{researchStrategy:{stages:[]},feeds:[]},review:{
+   observations:3,missedCandidates:1,failedSignals:1,unobservableOutcomes:1,coverageGaps:1,method:'Same dated horizons and benchmark.',playbooks:[],
+   outcomes:[{key:'up',symbol:'FIX2',chain:'base',horizon:24,excessPoints:5,returnPct:7,btcReturnPct:2,flagged:true,at:at-86400000},
+    {key:'down',symbol:'FIX3',chain:'bsc',horizon:24,excessPoints:-3,returnPct:-1,btcReturnPct:2,flagged:true,failedSignal:true,at:at-86400000},
+    {key:'watch',symbol:'FIX5',chain:'arc',horizon:72,excessPoints:4,returnPct:6,btcReturnPct:2,missedCandidate:true,at:at-3*86400000} ]}}});
+  if(useResearchFixture&&path==='/api/research-card'){
+   const {action,requestId}=route.request().postDataJSON();
+   const section={title:'Volume readings',note:'Read both dated observations before comparing.',
+    rows:Array.from({length:4},(_,i)=>({label:'Reading '+(i+1),metrics:[['Pool liquidity','$50k'],['1h volume','$21k']],detail:'The original source detail remains available.'}))};
+   return route.fulfill({json:{version:1,requestId,key:'b'.repeat(64),action,completedAt:at,status:'ready',
+    sources:[{provider:'Fixture DEX',status:'current',fetchedAt:at,delivery:'fixture'}],sections:[section],gaps:['Some pools lack a dated holder count.']}});
   }
   if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Public provider not connected in this browser test'}});
   return route.fulfill({status:404,body:''});
@@ -472,7 +498,105 @@ try{
  }
  await page.evaluate(()=>{document.documentElement.dataset.theme='light';layout();});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'Rotation fits in light mode at 320px');
+ const previews='#toast,.composer,.composer-note,body::after{visibility:hidden}.card[data-axo-reading]{outline:none!important;box-shadow:none!important}';
+ await page.setViewportSize({width:1440,height:1000});
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';axoGoStream({type:'chain',chain:'base'});});
+ const baseOverview=page.locator('[data-card="stream-data-chain-base-overview"]');
+ await baseOverview.getByRole('heading',{name:'Protocol TVL'}).waitFor();
+ assert.equal(await baseOverview.locator('.axo-overview-trend').count(),3);
+ assert.equal(await baseOverview.locator('details').getAttribute('open'),null);
+ await baseOverview.getByText('Dates, sources and coverage').click();
+ await baseOverview.getByText(/Daily DEX comparisons exclude/).waitFor();
+ await baseOverview.getByText('Dates, sources and coverage').click();
+ await baseOverview.screenshot({path:'outputs/axo-card-audit-chain-overview.png',style:previews});
+ const cardPlan={template:{id:'a'.repeat(24)},title:'Price momentum matrix',targetStream:'current',components:['momentum_matrix','metric_table'],
+  metrics:['liquidity','volume24','change24'],chains:['base'],liquidityMin:100000,volumeMin:90002};
+ await page.evaluate(plan=>{axoApplyCardPlan(plan);axoApplyCardPlan(plan);},cardPlan);
+ const matrix=page.locator('.axo-attached-card').filter({has:page.getByRole('heading',{name:cardPlan.title,exact:true})});
+ const includeUnchecked=page.locator('[data-pulse-unchecked]');
+ await includeUnchecked.uncheck();
+ assert.equal(await matrix.locator('.axo-momentum-matrix').count(),0,'Unchecked projects stay out when screening is required');
+ await includeUnchecked.check();
+ await matrix.getByRole('table',{name:'Project price change by window'}).first().waitFor();
+ assert.equal(await matrix.count(),1,'A repeated request reuses its attachment');
+ assert.equal(await matrix.locator('.axo-matrix-meta').first().innerText(),'Price change by window\n9 / 9 pools');
+ assert.equal(await matrix.locator('.axo-momentum-matrix tbody tr').first().locator('[data-direction="missing"]').count(),1);
+ assert.equal(await matrix.locator('.axo-momentum-matrix tbody tr').nth(1).locator('[data-direction="flat"]').count(),1);
+ assert.equal(await matrix.locator('.axo-compare-bar').count(),18);
+ assert.deepEqual(await matrix.locator('.axo-momentum-matrix [data-project-dashboard]').evaluateAll(nodes=>nodes.map(node=>node.dataset.projectDashboard)),overviewPools.slice(2).reverse().map(p=>p.id));
+ await matrix.getByText('Show 1 more pool',{exact:true}).click();
+ assert.equal(await matrix.locator('.axo-momentum-matrix').last().isVisible(),true);
+ await matrix.getByText('Show 1 more pool',{exact:true}).click();
+ for(const width of [1440,390,320]){
+  await page.setViewportSize({width,height:1000});
+  await matrix.evaluate(async el=>{document.activeElement?.blur();layout();await new Promise(requestAnimationFrame);el.scrollIntoView({block:'start',behavior:'instant'});});
+  assert.equal(await matrix.evaluate(el=>el.scrollWidth<=el.clientWidth+1&&document.documentElement.scrollWidth<=innerWidth+1),true,'Saved matrix fits '+width+'px');
+  if(width===390)await matrix.locator('.axo-matrix-panel').screenshot({path:'outputs/axo-card-audit-momentum-mobile.png',style:previews});
+ }
+ await matrix.locator('.axo-momentum-matrix').first().getByRole('button',{name:/PAGE11/}).click();
+ await page.waitForFunction(pool=>axoStream.project?.pool===pool,overviewPools.at(-1).pair);
+ assert.equal(await page.evaluate(()=>axoStream.project.address),overviewPools.at(-1).address);
+ await page.reload({waitUntil:'load'});
+ await page.evaluate(()=>axoGoStream({type:'chain',chain:'base'}));
+ await includeUnchecked.check();
+ await matrix.getByText('Price change by window',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>axoAttachedCards[0].volumeMin),90002);
+ await matrix.getByRole('button',{name:'Remove card'}).click();
+ assert.equal(await matrix.count(),0);
+ await page.evaluate(()=>axoGoStream({type:'changes'}));
+ const changesCard=page.locator('[data-card="stream-data-changes"]');
+ await changesCard.getByText('After',{exact:true}).waitFor();
+ assert.equal(await changesCard.locator('.axo-compare-bar').count(),2);
+ assert.equal(await changesCard.getByText('Both values refer to the same pool.').isVisible(),false);
+ await changesCard.getByText('Fixture DEX').click();
+ await changesCard.getByText('Both values refer to the same pool.').waitFor();
+ useResearchFixture=true;
+ await page.evaluate(()=>axoGoStream({type:'research-review'}));
+ const reviewCard=page.locator('[data-card="stream-data-research-report"]');
+ await reviewCard.getByText('+5.0 pp',{exact:true}).waitFor();
+ assert.equal(await reviewCard.locator('.axo-review-zero [data-direction="down"]').count(),1);
+ await reviewCard.getByRole('button',{name:'72h',exact:true}).click();
+ await reviewCard.getByText('+4.0 pp',{exact:true}).waitFor();
+ assert.equal(await reviewCard.locator('.axo-review-zero [data-direction="down"]').count(),0);
+ await page.evaluate(()=>{axoGoStream({type:'home'});axoCreateResearchCard({version:1,kind:'markets',question:'Show the sample volume readings',scope:{chains:['base']}});});
+ const researchCard=page.locator('.research-action-card');
+ await researchCard.getByText('Reading 1',{exact:true}).waitFor();
+ assert.equal(await researchCard.getByText('Reading 4',{exact:true}).isVisible(),false);
+ await researchCard.getByText('Show 1 more finding',{exact:true}).click();
+ await researchCard.getByText('Reading 4',{exact:true}).waitFor();
+ assert.equal(await researchCard.getByText('Some pools lack a dated holder count.').isVisible(),false);
+ await researchCard.getByText('Evidence gaps · 1',{exact:true}).click();
+ await researchCard.getByText('Some pools lack a dated holder count.').waitFor();
+ const updates=await page.evaluate(()=>{
+  const originalNow=Date.now,originalPause=paused,initialPending=[...axoPendingMarkets];
+  const saved={input:axoLastInput,scroll:axoMarketScrollAt,market:axoMarketPresented,arrivals:axoArrivalPending,promoted:[...axoArrivalPromoted],arrivalAt:axoArrivalPresented};
+  const complete=[],readings=[];
+  let t=originalNow(),canRead=false;
+  try{
+   Date.now=()=>t;paused=false;axoLastInput=t-2000;axoMarketScrollAt=t-2000;axoMarketPresented=t;axoPendingMarkets.clear();
+   axoQueueMarketUpdate('fixture',()=>complete.push('original'));
+   axoQueueMarketUpdate('fixture',()=>complete.push('latest'));
+   t+=29999;axoFlushMarketUpdates();readings.push(complete.length);
+   t++;axoFlushMarketUpdates();readings.push(complete.length);
+   t+=30000;axoQueueMarketUpdate('read',()=>complete.push('after reading'),()=>canRead);readings.push(complete.length);
+   canRead=true;axoFlushMarketUpdates();readings.push(complete.length);
+   paused=true;t+=30000;axoQueueMarketUpdate('refresh',()=>complete.push('old auto'));readings.push(complete.length);
+   axoPresentMarketNow('refresh',()=>complete.push('manual'));paused=false;t+=30000;axoFlushMarketUpdates();
+   axoArrivalPromoted.clear();axoArrivalPresented=-Infinity;
+   axoArrivalPending=new Map([['low',{at:t,relevance:0}],['high',{at:t,relevance:3}]]);
+   axoAcceptArrivals();axoAcceptArrivals();const first=[...axoArrivalPromoted.keys()];
+   t+=30000;axoAcceptArrivals();
+   return {complete,readings,first,promoted:[...axoArrivalPromoted.keys()]};
+  }finally{
+   Date.now=originalNow;paused=originalPause;axoLastInput=saved.input;axoMarketScrollAt=saved.scroll;
+   axoMarketPresented=saved.market;axoPendingMarkets.clear();for(const [key,job] of initialPending)axoPendingMarkets.set(key,job);
+   axoArrivalPending=saved.arrivals;axoArrivalPresented=saved.arrivalAt;axoArrivalPromoted.clear();
+   for(const [key,arrival] of saved.promoted)axoArrivalPromoted.set(key,arrival);
+   axoArrivalBanner();
+  }
+ });
+ assert.deepEqual(updates,{complete:['latest','after reading','manual'],readings:[0,1,1,2,2],first:['high'],promoted:['high','low']});
  assert.deepEqual(errors,[]);
  console.log('First result at an 844px viewport height',firstResultPositions);
- console.log('PASS Chrome Trading Desk, project research and Chain Rotation across five chains at desktop and mobile widths.');
+ console.log('PASS Chrome five-chain research, custom matrix with saved filters and exact links, visual change cards, and 30-second update pacing.');
 }finally{await browser.close();}

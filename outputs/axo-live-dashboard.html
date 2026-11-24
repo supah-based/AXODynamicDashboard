@@ -213,7 +213,22 @@ function layout(){const board=$('board'),gap=16,w=board.clientWidth;let count=Ma
 window.addEventListener('resize',()=>requestAnimationFrame(layout));
 $('board').addEventListener('pointerdown',e=>{if(e.target.closest('.card')){hovered=true;clearTimeout(window.holdTimer);window.holdTimer=setTimeout(()=>{hovered=false;if(queued&&!paused&&!modalOpen)render()},3500)}});
 $('board').addEventListener('pointerout',e=>{if(!e.relatedTarget||!$('board').contains(e.relatedTarget)){hovered=false;if(queued&&!paused&&!modalOpen)render()}});
-let updateTimer;async function pull(){if(busy)return;busy=true;try{let r=await fetch('/api/dashboard');if(!r.ok)throw new Error();snapshot=await r.json();render()}catch{$('connection').textContent='Local data service unavailable'}finally{busy=false}}
+let updateTimer,pullAgain=false,hasDashboardSnapshot=false;
+async function pull(immediate=false){
+ if(busy){pullAgain ||= immediate;return;}
+ if(document.hidden&&!immediate)return;
+ busy=true;
+ try{
+  const r=await fetch('/api/dashboard',{signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw Error();
+  const next=await r.json();
+  const present=()=>{snapshot=next;hasDashboardSnapshot=true;render(immediate);};
+  if(typeof axoQueueMarketUpdate!=='function')present();
+  else if(immediate||!hasDashboardSnapshot)axoPresentMarketNow('dashboard',present);
+  else axoQueueMarketUpdate('dashboard',present);
+ }catch{$('connection').textContent='Local data service unavailable';}
+ finally{busy=false;if(pullAgain){pullAgain=false;void pull(true);}}
+}
 const stream=new EventSource('/api/events');stream.onmessage=()=>{clearTimeout(updateTimer);updateTimer=setTimeout(pull,450)};stream.onerror=()=>{$('connection').textContent='Reconnecting to local service…'};
 pull();setInterval(pull,20000);
 function open(content){$('detail').innerHTML=content;modalOpen=true;$('overlay').classList.remove('hidden');document.body.style.overflow='hidden';$('close').focus()}
@@ -233,7 +248,7 @@ $('coverage').onclick=coverage;$('learn').onclick=()=>{learning=!learning;save()
 $('pause').onclick=()=>{paused=!paused;$('pause').textContent=paused?'▷ Resume layout':'Ⅱ Pause layout';if(!paused)render(true)};
 
 $('reset').onclick=()=>{interest={};pins=[];hidden=[];custom=[];manualUntil=0;selected=[];mode='balanced';save();render(true);toast('Default view restored.')};
-$('refresh').onclick=async()=>{await fetch('/api/refresh');toast('Requested fresh public data. Provider caches and observation intervals still apply.')};
+$('refresh').onclick=async()=>{try{const response=await fetch('/api/refresh',{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error();void pull(true);toast('Refresh requested. The latest available readings will load.');}catch{toast('Refresh is unavailable. Try again shortly.','error');}};
 document.addEventListener('keydown',e=>{if(!modalOpen)return;if(e.key==='Escape'){close();return}if(e.key==='Tab'){let a=[...$('overlay').querySelectorAll('button,input,a[href]')].filter(x=>!x.disabled),f=a[0],l=a.at(-1);if(e.shiftKey&&document.activeElement===f){e.preventDefault();l.focus()}else if(!e.shiftKey&&document.activeElement===l){e.preventDefault();f.focus()}}});
 $('mic').onclick=()=>{if(recognition){recognition.stop();return}let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){toast('Voice recognition is unavailable in this browser. You can type the same request.');return}recognition=new SR();recognition.lang='en-US';recognition.interimResults=true;recognition.continuous=false;$('mic').classList.add('active');$('voiceStatus').textContent='Listening only for this request · your browser may use an online speech service';recognition.onresult=e=>{let t=[...e.results].map(r=>r[0].transcript).join(' ');$('ask').value=t;if(e.results[e.results.length-1].isFinal)ask(t)};recognition.onerror=e=>toast('Voice input unavailable: '+e.error+'. Type your request instead.');recognition.onend=()=>{recognition=null;$('mic').classList.remove('active');$('voiceStatus').textContent=window.axoAiNote?window.axoAiNote():'Axo status loading…'};try{recognition.start()}catch{recognition=null;$('mic').classList.remove('active');toast('The browser could not start voice input.')}};
 window.addEventListener('pagehide',()=>{stream.close();recognition?.stop()});render(true);

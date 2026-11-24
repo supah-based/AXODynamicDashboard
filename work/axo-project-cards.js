@@ -68,7 +68,7 @@ layout=function(){
   'brief','chainvolume','news-radar','stream-data-project-chart','stream-data-momentum-board','stream-data-activity-map','stream-data-axo-history','stream-data-axo-pool-chart','stream-data-hatchery-list'];
  const items=[...board.children].map(el=>{
   const id=el.dataset.card;
-  const wideCard=wide.includes(id)||/^stream-data-chain-[a-z]+-market-signals$/.test(id)||axoExpanded.has(id);
+  const wideCard=wide.includes(id)||el.classList.contains('axo-visual-layout')||/^stream-data-chain-[a-z]+-(market-signals|overview)$/.test(id)||axoExpanded.has(id);
   let span=fullWidth.includes(id)?columns:wideCard?Math.min(2,columns):1;
   if(axoStream.type==='project'){
    const anchorSpan=columns<=2?columns:columns===3?1:2;

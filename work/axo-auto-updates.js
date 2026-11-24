@@ -1,6 +1,28 @@
-/* All feed changes reconcile automatically. Only explicit Pause stops layout updates. */
+/* Batch background market snapshots while leaving direct actions responsive. */
 let axoAutoPointerDown=false,axoAutoRunning=false;
 function axoAutoSafe(){return !paused&&!document.hidden&&!dragged&&!axoRailDrag&&!axoAutoPointerDown&&Date.now()-axoLastInput>=1100}
+const axoPendingMarkets=new Map();
+let axoMarketPresented=-Infinity,axoMarketFlushing=false,axoMarketScrollAt=-Infinity;
+function axoMarketReady(){return axoAutoSafe()&&!modalOpen&&!document.querySelector('dialog[open]')&&Date.now()-axoMarketScrollAt>=1500}
+function axoQueueMarketUpdate(key,apply,ready=()=>true){
+ axoPendingMarkets.set(key,{apply,ready});
+ axoArrivalBanner();
+ axoFlushMarketUpdates();
+}
+function axoPresentMarketNow(key,apply){
+ axoPendingMarkets.delete(key);
+ axoMarketPresented=Date.now();
+ apply();
+}
+function axoFlushMarketUpdates(){
+ if(!axoPendingMarkets.size||axoMarketFlushing||!axoMarketReady()||Date.now()-axoMarketPresented<axoPresentationInterval)return;
+ const ready=[...axoPendingMarkets].filter(([,job])=>job.ready());
+ if(!ready.length)return;
+ axoMarketPresented=Date.now();axoMarketFlushing=true;
+ try{for(const [key,job] of ready){axoPendingMarkets.delete(key);job.apply();}}
+ finally{axoMarketFlushing=false;}
+ if(queued)axoAutomaticRefresh();
+}
 function axoLiveNodeKey(n){if(n?.nodeType!==1)return '';if(n.id)return 'id:'+n.id;for(const attr of ['data-card','data-lp-row','data-pc-key','data-context-tile','data-saved-metric'])if(n.hasAttribute(attr))return attr+':'+n.getAttribute(attr);if(n.matches('button,a,input,select,textarea')){const d=[...n.attributes].find(a=>a.name.startsWith('data-')&&!['data-scope-chain','data-chain-chip'].includes(a.name));if(d)return n.tagName+':'+d.name+':'+d.value;if(n.getAttribute('href'))return 'href:'+n.getAttribute('href')}return ''}
 window.axoPatchLiveCard=function(target,fresh){
  function patch(a,b){if(a.nodeType!==b.nodeType||a.nodeName!==b.nodeName){a.replaceWith(b.cloneNode(true));return}if(a.nodeType===3){if(a.nodeValue!==b.nodeValue)a.nodeValue=b.nodeValue;return}if(a.nodeType!==1)return;
@@ -19,10 +41,15 @@ function axoAutomaticRefresh(){if(axoAutoRunning||!axoAutoSafe())return;const bo
  axoAutoRunning=true;axoAutoRetained=new Set();axoApplyingArrivals=true;document.documentElement.classList.add('axo-auto-updating');
  try{axoAutoRenderBase(true);if(focused?.isConnected&&document.activeElement!==focused)focused.focus?.({preventScroll:true});const after=anchor?.isConnected?anchor:[...board.querySelectorAll('[data-card],[data-lp-row]')].find(el=>axoLiveNodeKey(el)===key);if(after&&before!==undefined&&!modalOpen&&!window.axoLayoutHold?.active()){const dy=after.getBoundingClientRect().top-before;if(Math.abs(dy)>.5&&scrollYBefore>0)window.scrollBy({top:dy,behavior:'instant'})}axoArrivalBanner()}finally{axoApplyingArrivals=false;axoAutoRunning=false;requestAnimationFrame(()=>document.documentElement.classList.remove('axo-auto-updating'))}
 }
-const axoAutoRenderBase=render;render=function(force=false){if(force)return axoAutoRenderBase(true);if(axoAutoSafe())return axoAutomaticRefresh();queued=snapshot;axoArrivalBanner()};
-axoArrivalBanner=function(){const el=$('pending');if(!el)return;const pending=!!queued||!!axoArrivalPending.size||lp.pending.size>0;el.classList.toggle('hidden',!pending||!paused);el.querySelector('span').textContent=paused?'Live layout paused · resume with the Pause control.':'Live updates reconcile automatically.'};
+const axoAutoRenderBase=render;render=function(force=false){if(force)return axoAutoRenderBase(true);if(!axoMarketFlushing&&axoAutoSafe())return axoAutomaticRefresh();queued=snapshot;axoArrivalBanner()};
+axoArrivalBanner=function(){const el=$('pending');if(!el)return;const pending=!!queued||!!axoArrivalPending.size||lp.pending.size>0||axoPendingMarkets.size>0;el.classList.toggle('hidden',!pending||!paused);el.querySelector('span').textContent=paused?'Live layout paused · resume with the Pause control.':'Live updates reconcile automatically.'};
 document.addEventListener('pointerdown',()=>{axoAutoPointerDown=true},{capture:true,passive:true});for(const event of ['pointerup','pointercancel','dragend'])document.addEventListener(event,()=>{axoAutoPointerDown=false},{capture:true,passive:true});window.addEventListener('blur',()=>{axoAutoPointerDown=false});
 document.addEventListener('input',e=>{if(e.target.matches('input,textarea,select'))e.target.dataset.userEdited='true'});
-const autoTimer=setInterval(()=>{if(queued||axoArrivalPending.size||lp.pending.size)axoAutomaticRefresh()},1250);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)axoAutomaticRefresh()});
+function axoWakeUpdates(){
+ axoFlushMarketUpdates();
+ if(queued||lp.pending.size||axoArrivalReady()&&axoMarketReady()&&!axoArrivalHeld())axoAutomaticRefresh();
+}
+const autoTimer=setInterval(axoWakeUpdates,1250);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)axoWakeUpdates()});
+window.addEventListener('scroll',()=>{axoMarketScrollAt=Date.now();},{passive:true});
 const autoStyle=document.createElement('style');autoStyle.textContent='.axo-auto-updating .card{transition:opacity .18s ease!important}.axo-auto-updating .card.new{animation:axo-soft-arrival .25s ease}@keyframes axo-soft-arrival{from{opacity:.4}to{opacity:1}}#pending{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:9;max-width:90vw;font-size:10px;padding:6px 10px;pointer-events:none}@media(prefers-reduced-motion:reduce){.axo-auto-updating .card.new{animation:none!important}}';document.head.append(autoStyle);axoArrivalBanner();
